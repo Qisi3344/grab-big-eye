@@ -41,6 +41,8 @@ index.html          页面骨架与界面
 css/style.css       祭坛面板、扫描线、闪烁
 js/util.js          随机数、几何小工具
 js/projection.js    桌面透视机位（投影 / 反投影）
+js/monster3d.js     three.js 3D 克苏鲁（与游戏同一相机、低清无抗锯齿渲染 + 像素描边；加 ?2d 回到 2D 版）
+js/vendor/three.min.js  three.js r149（MIT）
 js/sprites.js       24×24 有体积的像素供品（球面打光、程序化点阵）
 js/board.js         63 张 / 3 层布局、压住判定、可解的类型分配、塞回下层
 js/game.js          槽位、三消、撤销、洗牌、San、捣乱节奏、胜负

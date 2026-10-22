@@ -198,7 +198,15 @@
     return pts;
   }
 
+  // 有 WebGL 时用 three.js 的 3D 克苏鲁（monster3d.js），否则用下面的 2D 画法
+  function use3D() {
+    const M3 = G.M3;
+    if (!M3 || (typeof location !== 'undefined' && /[?&]2d\b/.test(location.search))) return false;
+    if (!M3.tried) M3.init();
+    return M3.ok;
+  }
   M.drawBack = function (ctx, time, W, H) {
+    if (use3D()) return;
     const { hx, hy, u } = M;
     // 身后暗沉的一团触手肉
     const g = ctx.createRadialGradient(hx, hy + u * 0.8, u * 0.3, hx, hy + u * 1.0, u * 3.2);
@@ -371,6 +379,7 @@
   }
 
   M.drawFront = function (ctx, time, dt, W, H) {
+    if (use3D()) { G.M3.render(ctx, time, dt, W, H); return; }
     const { hx, hy, u } = M;
     const san = S.san / 100;
     const bob = Math.sin(time * 0.6) * u * 0.05;
@@ -419,6 +428,11 @@
       const k = (i - 2.5) / 2.5;
       G.drawTentacle(ctx, P, u * (0.46 - Math.abs(k) * 0.1), u * 0.07, i % 2 ? PAL_FACE : PAL_FACE2, { sq, seed: i, sideX: k < 0 ? 1 : -1, suckerColor: PAL_FACE.red });
     }
+    M.drawDrips(ctx, dt);
+  };
+
+  M.drawDrips = function (ctx, dt) {
+    const u = M.u;
     // 滴液
     M.dripT -= dt;
     if (M.dripT <= 0) {

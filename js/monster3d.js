@@ -221,12 +221,11 @@
 
   // —— 外部模型（Tripo 生成的半身克苏鲁，assets/cthulhu.glb）——
   // 自己解析 GLB（单网格 + 一张底色贴图），省掉 GLTFLoader
-  const MS = 17, MODEL_HEAD = [0, 0.44, 0.3], MODEL_EYE = [0.032, 0.352, 0.462], ANCHOR = [0.03, 0.40, 0.425];
-  function mpos(x, y, z) { return new T.Vector3(x * MS + P.model.position.x, y * MS + P.model.position.y, z * MS + P.model.position.z); }
+  const MODEL_TILT = 0.4, MS = 17, MODEL_HEAD = [0, 0.44, 0.3], MODEL_EYE = [0.03, 0.378, 0.452], ANCHOR = [0.03, 0.40, 0.425];
+  function mpos(x, y, z) { return new T.Vector3(x, y, z).multiplyScalar(MS).add(P.model.position).applyEuler(P.pivot.rotation).add(P.pivot.position); }
   async function loadModel() {
     if (typeof fetch === 'undefined' || /[?&]proc\b/.test(location.search)) return;
     // 载入期间先藏起手捏的头，免得闪一下旧脸
-    for (const o of P.proc) o.visible = false;
     for (const t of P.procTents) t.mesh.visible = false;
     M3.loading = true;
     try {
@@ -286,17 +285,23 @@
         sh.vertexShader = sh.vertexShader.replace('void main() {', 'varying float vDep;\nvoid main() {').replace('#include <project_vertex>', '#include <project_vertex>\n vDep = -mvPosition.z;');
         sh.fragmentShader = 'varying float vDep;\n' + sh.fragmentShader.replace(/}\s*$/, ' float dq = clamp(vDep / 100.0, 0.0, 1.0) * 255.0; gl_FragColor = vec4(floor(dq) / 255.0, fract(dq), 1.0, 1.0);\n}');
       };
+      const DBG = window.GBE_DBG || '';
       const m = new T.Mesh(geo, mat);
       m.frustumCulled = false;
       m.scale.setScalar(MS);
-      m.position.set(0, 0.12 - ANCHOR[1] * MS, 1.17 - ANCHOR[2] * MS);   // 让模型的眼睛落在原来眼睛的位置
+      m.position.set(-ANCHOR[0] * 0, -ANCHOR[1] * MS, -ANCHOR[2] * MS);
+      // 绕眼睛所在的点前倾：相机在克苏鲁下方偏前，不前倾的话圆颅顶会被眉骨挡住，看着像扁头
+      const pivot = new T.Group(); pivot.position.set(0, 0.12, 1.17);
+      const tm = /tilt(-?[\d.]+)/.exec(DBG); pivot.rotation.x = tm ? +tm[1] : MODEL_TILT;
+      pivot.add(m); P.pivot = pivot;
       tagId(m); m.userData.idMat = dmat;
-      const DBG = window.GBE_DBG || '';
       if (DBG === 'basic') m.material = new T.MeshBasicMaterial({ map: tex });
-      P.model = m; if (DBG !== 'noadd') group.add(m);
-      for (const o of P.proc) o.visible = false;
+      P.model = m; if (DBG !== 'noadd') group.add(pivot);
+      // 头就用 Tripo 模型自带的（她 2026-10-22 明确：不许改模型的头）；?prochead 才换回手捏石颅
+      const tripoHead = !/[?&]prochead\b/.test(location.search);
+      for (const o of P.proc) o.visible = !tripoHead;
       for (const t of P.procTents) t.mesh.visible = false;
-      for (const e of P.eyes) { e.base.copy(mpos(e.sd * MODEL_EYE[0], MODEL_EYE[1], MODEL_EYE[2])); e.es = 0.45; e.eye.rotation.z = e.sd * 0.35; }
+      if (tripoHead) for (const e of P.eyes) { e.base.copy(mpos(e.sd * MODEL_EYE[0], MODEL_EYE[1], MODEL_EYE[2])); e.es = 0.45; e.eye.rotation.z = e.sd * 0.35; }
       M3.fog = /nofog/.test(DBG) ? 0 : 0.3;
       if (/noeyes/.test(DBG)) for (const e of P.eyes) { e.eye.visible = false; e.core.visible = false; }
       M3.model = true;
@@ -304,7 +309,7 @@
     } catch (e) {
       console.warn('克苏鲁模型载入失败，用手捏版', e);
       M3.loading = false; M3.modelErr = String(e && e.message || e).slice(0, 60);
-      if (P.model) group.remove(P.model); P.model = null;
+      if (P.pivot) group.remove(P.pivot); P.model = null;
       for (const o of P.proc) o.visible = true;
       for (const t of P.procTents) t.mesh.visible = true;
     }

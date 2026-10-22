@@ -260,11 +260,15 @@
       const tex = new T.Texture(bmp); tex.flipY = false; tex.needsUpdate = true;
       const mat = toon({ map: tex, color: '#a9c4b8' });
       mat.onBeforeCompile = sh => {
-        sh.uniforms.uTime = P.uTime; sh.uniforms.uPoke = P.uPoke; sh.uniforms.uArm = P.uArm;
-        sh.vertexShader = 'uniform float uTime; uniform float uPoke; uniform vec2 uArm;\n' + sh.vertexShader.replace('#include <begin_vertex>', `
+        sh.uniforms.uTime = P.uTime; sh.uniforms.uPoke = P.uPoke; sh.uniforms.uArm = P.uArm; sh.uniforms.uBrow = P.uBrow;
+        sh.vertexShader = 'uniform float uTime; uniform float uPoke; uniform vec2 uArm; uniform float uBrow;\n' + sh.vertexShader.replace('#include <begin_vertex>', `
           vec3 transformed = vec3(position);
           float ax = abs(position.x), sx = position.x < 0.0 ? -1.0 : 1.0;
           // 头部保持 Tripo 原模型的形状，不做变形
+          // 表情：眉骨（眼睛上方、鼻根两侧）压低成 V 字是怒，抬起是得意；越靠中间动得越多
+          float brw = (1.0 - smoothstep(0.03, 0.075, ax)) * smoothstep(0.355, 0.37, position.y) * (1.0 - smoothstep(0.39, 0.415, position.y)) * smoothstep(0.40, 0.44, position.z);
+          transformed.y -= uBrow * brw * (1.0 - ax / 0.075) * 0.03;
+          transformed.z += max(uBrow, 0.0) * brw * 0.01;
           // 蝠翼：绕肩慢慢开合
           float ww = smoothstep(0.08, 0.22, ax) * smoothstep(0.24, 0.36, position.y) * (1.0 - smoothstep(0.12, 0.3, position.z));
           float ang = ww * (sin(uTime * 0.8) * 0.10 + 0.02) * sx;
@@ -283,7 +287,7 @@
           transformed.y += sw * rr * (sin(uTime * 0.7 + ax * 18.0 + sx) * 0.012 + pk * sin(uTime * 14.0 + ax * 50.0) * 0.012);
           transformed.z += sw * rr * cos(uTime * 0.6 + ax * 14.0) * 0.008;`);
       };
-      P.uTime = { value: 0 }; P.uPoke = { value: 0 }; P.uArm = { value: new T.Vector2() };
+      P.uTime = { value: 0 }; P.uPoke = { value: 0 }; P.uArm = { value: new T.Vector2() }; P.uBrow = { value: 0 }; P.mood = { a: 0, s: 0, w: 0, h: 0 };
       // 编号通道里模型改写深度（r/g 两字节，b=255 作记号），描边时按深度跳变找出触手之间的轮廓
       const dmat = new T.MeshBasicMaterial();
       dmat.onBeforeCompile = sh => {
@@ -349,18 +353,33 @@
     // 眼
     M.eyeSquint.t += dt;
     const squint = M.eyeSquint.t < 0.9 ? Math.sin(Math.min(1, M.eyeSquint.t / 0.9) * Math.PI) * 0.7 : 0;
-    const open = G.clamp(M.intro * 1.2 - 0.6, 0, 1) * (1 - M.blinkAmt(time)) * (1 - squint);
-    const ic = new T.Color(G.mixHex('#2fe37a', '#ff3a2a', Math.max(0, 0.6 - san) / 0.6));
+    // 表情：各成分平滑过渡。San 低时基础就带点怒
+    const md = M.mood || { kind: '', t: 9, dur: 0 }; md.t += dt;
+    const fm = /mood(\w+)/.exec(window.GBE_DBG || ''), on = k => (fm ? (fm[1] === k ? 1 : 0) : (md.kind === k && md.t < md.dur ? 1 : 0));
+    const live = G.liveSlot ? G.liveSlot().length : 0;
+    const PM = P.mood || (P.mood = { a: 0, s: 0, w: 0, h: 0 }), ease = (v, tg, sp) => v + (tg - v) * Math.min(1, dt * sp);
+    PM.a = ease(PM.a, Math.max(on('angry'), Math.max(0, 0.5 - san) * 1.2), 6);
+    PM.s = ease(PM.s, on('smug'), 4);
+    PM.w = ease(PM.w, fm ? on('stare') : S.state === 'play' && live >= 5 && PM.s < 0.3 ? 1 : 0, 3);
+    PM.h = ease(PM.h, on('hurt'), 14);
+    M.moodNow = PM;
+    if (P.uBrow) P.uBrow.value = PM.a - PM.s * 0.7 - PM.w * 0.3;
+    const lid = 1 - PM.a * 0.4 - PM.s * 0.6 - PM.h * 0.85 + PM.w * 0.9;
+    const open = G.clamp(M.intro * 1.2 - 0.6, 0, 1) * (1 - M.blinkAmt(time)) * (1 - squint) * Math.max(0.05, lid);
+    const ic = new T.Color(G.mixHex(G.mixHex('#2fe37a', '#ff3a2a', Math.max(0, 0.6 - san) / 0.6), '#ff3020', PM.a * 0.8));
+    if (PM.w > 0.01) ic.lerp(new T.Color('#c8ffd8'), PM.w * 0.35);
     M.eyeScreen = [];
     const ptr = G.pointer;
     for (const e of P.eyes) {
-      e.eye.position.copy(e.base); e.eye.scale.set(1.35 * e.es, Math.max(0.04, 0.42 * open) * e.es, 0.5 * e.es);
+      e.eye.position.copy(e.base); e.eye.scale.set(1.35 * e.es * (1 + PM.w * 0.1 + PM.a * 0.15), Math.max(0.04, 0.42 * open) * e.es, 0.5 * e.es);
+      e.eye.rotation.z = e.sd * (P.model ? 0.35 : 0.42) + e.sd * (PM.a * 0.45 - PM.s * 0.4);
+      if (PM.s > 0.05) e.eye.position.y += PM.s * 0.03 * e.es;
       e.eye.material.color.copy(ic);
       e.lt.color.copy(ic); e.lt.intensity = 0.9 * open;
       const es = t2s(L(e.base.x, e.base.y, e.base.z));
       let ox = 0, oy = 0;
       if (ptr) { const dx = ptr.x - es[0], dy = ptr.y - es[1], dd = Math.hypot(dx, dy) || 1, k = Math.min(1, dd / 60) * 0.08; ox = (dx / dd) * k; oy = -(dy / dd) * k * 0.3; }
-      e.core.position.set(e.base.x + ox * e.es, e.base.y + oy * open * e.es, e.base.z + 0.07 * e.es); e.core.scale.setScalar(e.es);
+      e.core.position.set(e.base.x + ox * e.es, e.base.y + oy * open * e.es, e.base.z + 0.07 * e.es); e.core.scale.setScalar(e.es * (1 - PM.w * 0.4));
       e.lt.position.set(e.base.x, e.base.y - 0.12 * e.es, e.base.z + 0.28 * e.es);
       e.core.visible = open > 0.15;
       M.eyeScreen.push([es[0], es[1], open]);
@@ -396,7 +415,7 @@
         M.facePaths[i] = pts.map(p => [p[0], p[1]]);
         pk = Math.max(pk, Math.max(0, 1.2 - M.faceSq[i].t) / 1.2);
       }
-      P.uPoke.value = pk; P.uTime.value = time;
+      P.uPoke.value = Math.max(pk, PM.a * 0.45 + PM.h * 0.8); P.uTime.value = time;
     }
     // 身后的粗触手：左右各三条，波浪着伸出屏幕
     const halfW = (W / 2) / M.u;
@@ -514,7 +533,7 @@
       for (const [bx, by, rx, ry, a] of blobs) { const dx = (x - bx) / rx, dy = (y - by) / ry, r2 = dx * dx + dy * dy; if (r2 < 1) f += a * (1 - r2) * (1 - r2); }
       // 眼睛周围雾渐薄，眼光透出来
       for (const [ex, ey] of M.eyeScreen) { const dx = (x - ex) / (uu * 0.3), dy = (y - ey) / (uu * 0.15), r = Math.sqrt(dx * dx + dy * dy); if (r < 1.6) f *= Math.max(0, (r - 0.6) / 1.0); }
-      f = Math.min(1, f) * M3.fog;
+      f = Math.min(1, f) * M3.fog * (1 + (M.moodNow ? M.moodNow.w * 0.7 : 0));
       const lv = Math.min(4, Math.floor(f * 4 + BY[(y & 3) * 4 + (x & 3)] / 16)) / 4;
       if (lv > 0) { const m = 1 - 0.92 * lv; d[q] = d[q] * m + 1 * lv; d[q + 1] = d[q + 1] * m + 4 * lv; d[q + 2] = d[q + 2] * m + 4 * lv; }
     }
@@ -526,7 +545,7 @@
     const hex = '#' + ic.getHexString();
     for (const [x, y, o] of M.eyeScreen) {
       if (o < 0.05) continue;
-      const R = M.u * 0.2, fl = 0.85 + 0.15 * Math.sin(time * 7 + x);
+      const R = M.u * 0.2 * (1 + (M.moodNow ? M.moodNow.w * 0.6 + M.moodNow.a * 0.3 : 0)), fl = 0.85 + 0.15 * Math.sin(time * 7 + x);
       const g = ctx.createRadialGradient(x, y, 0, x, y, R * 3);
       g.addColorStop(0, hex + Math.round(0x50 * o * fl).toString(16).padStart(2, '0')); g.addColorStop(1, hex + '00');
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R * 3, 0, TAU); ctx.fill();

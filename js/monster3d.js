@@ -226,12 +226,24 @@
   async function loadModel() {
     if (typeof fetch === 'undefined' || /[?&]proc\b/.test(location.search)) return;
     // 载入期间先藏起手捏的头，免得闪一下旧脸
+    // 手机上旧版会露出手捏的光头 + 程序手臂（她 2026-10-22 截图）：载入期间整只藏起来，只留黑雾里的眼光
     for (const t of P.procTents) t.mesh.visible = false;
-    M3.loading = true;
+    for (const o of P.proc) o.visible = false;
+    for (const t of P.arms) t.mesh.visible = false;
+    M3.loading = true; M3.progress = 0;
+    const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const killer = setTimeout(() => { M3.timedOut = true; if (ctl) ctl.abort(); }, 45000);
     try {
-      const res = await fetch(window.GBE_MODEL_URL || 'assets/cthulhu.glb');
+      const res = await fetch(window.GBE_MODEL_URL || 'assets/cthulhu.glb', ctl ? { signal: ctl.signal } : undefined);
       if (!res.ok) throw new Error('下载失败 ' + res.status);
-      const buf = await res.arrayBuffer();
+      let buf;
+      const total = +res.headers.get('content-length') || 0;
+      if (res.body && res.body.getReader && total) {
+        const rd = res.body.getReader(), all = new Uint8Array(total); let got = 0;
+        for (;;) { const { done, value } = await rd.read(); if (done) break; if (got + value.length > all.length) throw new Error('长度不符'); all.set(value, got); got += value.length; M3.progress = got / total; }
+        buf = all.buffer.slice(0, got);
+      } else buf = await res.arrayBuffer();
+      M3.progress = 1;
       const dv = new DataView(buf);
       const jl = dv.getUint32(12, true);
       const json = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 20, jl)));
@@ -316,11 +328,14 @@
       if (tripoHead) for (const e of P.eyes) { e.base.copy(mpos(e.sd * MODEL_EYE[0], MODEL_EYE[1], MODEL_EYE[2])); e.es = 0.45; e.eye.rotation.z = e.sd * 0.35; }
       M3.fog = /nofog/.test(DBG) ? 0 : 0.3;
       if (/noeyes/.test(DBG)) for (const e of P.eyes) { e.eye.visible = false; e.core.visible = false; }
+      clearTimeout(killer);
       M3.model = true;
       M3.loading = false;
     } catch (e) {
       console.warn('克苏鲁模型载入失败，用手捏版', e);
-      M3.loading = false; M3.modelErr = String(e && e.message || e).slice(0, 60);
+      clearTimeout(killer);
+      M3.loading = false; M3.modelErr = M3.timedOut ? '网络太慢，超时了' : String(e && e.message || e).slice(0, 60);
+      for (const t of P.arms) t.mesh.visible = true;
       if (P.pivot) group.remove(P.pivot); P.model = null;
       for (const o of P.proc) o.visible = true;
       for (const t of P.procTents) t.mesh.visible = true;

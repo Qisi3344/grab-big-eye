@@ -13,6 +13,7 @@
     <div class="scan"></div>
     <div id="hud"><span>盘中供品</span><b id="left">63</b></div>
     <div id="toast"></div>
+    <button id="btnMenu" class="icon" aria-label="菜单">☰</button>
   </div>
   <footer id="bar">
     <div class="san">
@@ -30,7 +31,30 @@
     <div class="card">
       <h1 id="endTitle">献祭完成</h1>
       <p id="endText"></p>
-      <button id="btnAgain">再来一局</button>
+      <div class="row"><button id="btnAgain">再来一局</button><button id="btnToLevels" class="ghost">回到关卡</button></div>
+    </div>
+  </div>
+  <!-- 开始界面 -->
+  <div id="title" class="show">
+    <div class="veil"></div>
+    <div class="titlebox">
+      <p class="kicker">— 深 渊 献 祭 —</p>
+      <h1 class="logo">抓大眼</h1>
+      <p class="sub">克苏鲁的小点心</p>
+      <div class="menu">
+        <button id="btnStart">开始献祭</button>
+        <button id="btnLevels" class="ghost">选择关卡</button>
+      </div>
+      <p class="hint" id="loadHint">祂正在醒来……</p>
+    </div>
+  </div>
+  <!-- 关卡选择 -->
+  <div id="levels">
+    <div class="veil"></div>
+    <div class="levelbox">
+      <h2>选择祭夜</h2>
+      <div id="levelList"></div>
+      <button id="btnBack" class="ghost back">返回</button>
     </div>
   </div>
 </main>

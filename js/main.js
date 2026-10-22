@@ -125,7 +125,17 @@
   G.newGame();
   S.state = 'menu'; document.body.classList.add('inmenu');   // 开始界面时克苏鲁在背后待着，模型趁这时候加载
   const hint = $('loadHint');
-  (function waitModel(t0) { if (G.M3 && (G.M3.model || G.M3.modelErr || !G.M3.ok && G.M3.tried)) { hint.textContent = '祂醒了'; return; } if (performance.now() - t0 > 15000) { hint.textContent = ''; return; } setTimeout(() => waitModel(t0), 300); })(performance.now());
+  // 模型没到就先别开局（手机网慢时会看到没头的克苏鲁）；失败或没有 WebGL 才放行
+  const btnStart = $('btnStart');
+  btnStart.disabled = true;
+  (function waitModel() {
+    const m = G.M3;
+    if (m && m.model) { hint.textContent = '祂醒了'; btnStart.disabled = false; return; }
+    if (m && m.modelErr) { hint.textContent = '祂没能完全醒来（' + m.modelErr + '），也可以先玩'; btnStart.disabled = false; return; }
+    if (!m || (m.tried && !m.ok) || /[?&](2d|proc)\b/.test(location.search)) { if (m && (m.tried || /2d|proc/.test(location.search))) { hint.textContent = ''; btnStart.disabled = false; return; } }
+    hint.textContent = '祂正在醒来' + (m && m.progress ? ' ' + Math.round(m.progress * 100) + '%' : '……');
+    setTimeout(waitModel, 250);
+  })();
   window.addEventListener('resize', resize);
   resize();
   requestAnimationFrame(loop);

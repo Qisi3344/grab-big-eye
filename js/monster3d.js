@@ -204,7 +204,7 @@
       const core = new T.Mesh(new T.SphereGeometry(0.06, 10, 8), new T.MeshBasicMaterial({ color: '#e6fff0' }));
       group.add(core);
       const lt = new T.PointLight('#3cff8c', 0.9, 1.6, 2); lt.position.set(sd * 0.55, 0.0, 1.45); group.add(lt);
-      P.eyes.push({ sd, eye, core, lt });
+      P.eyes.push({ sd, eye, core, lt, base: new T.Vector3(sd * 0.55, 0.12, 1.17), es: 1 });
     }
 
     // 触手们
@@ -213,6 +213,88 @@
     P.loops = []; for (let i = 0; i < 4; i++) P.loops.push(new Tent(40 + i, '#34463f'));
     P.curls = []; for (let i = 0; i < 4; i++) P.curls.push(new Tent(50 + i, '#24332e'));
     P.arms = []; for (let i = 0; i < 2; i++) P.arms.push(new Tent(60 + i, '#384a43'));
+    // 手捏的头和小触手先记下来：外部模型载入后就藏起来
+    P.proc = group.children.filter(o => o.isMesh && !P.eyes.some(e => e.eye === o || e.core === o));
+    P.procTents = [...P.face, ...P.back, ...P.loops, ...P.curls];
+    loadModel();
+  }
+
+  // —— 外部模型（Tripo 生成的半身克苏鲁，assets/cthulhu.glb）——
+  // 自己解析 GLB（单网格 + 一张底色贴图），省掉 GLTFLoader
+  const MS = 17, MODEL_HEAD = [0, 0.44, 0.3], MODEL_EYE = [0.028, 0.384, 0.45], ANCHOR = [0.03, 0.40, 0.425];
+  function mpos(x, y, z) { return new T.Vector3(x * MS + P.model.position.x, y * MS + P.model.position.y, z * MS + P.model.position.z); }
+  async function loadModel() {
+    if (typeof fetch === 'undefined' || /[?&]proc\b/.test(location.search)) return;
+    try {
+      const buf = await (await fetch(window.GBE_MODEL_URL || 'assets/cthulhu.glb')).arrayBuffer();
+      const dv = new DataView(buf);
+      const jl = dv.getUint32(12, true);
+      const json = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 20, jl)));
+      const binOff = 20 + jl + 8;
+      const view = i => { const bv = json.bufferViews[i]; return [binOff + (bv.byteOffset || 0), bv.byteLength]; };
+      const acc = i => {   // 支持交错存储（byteStride）
+        const a = json.accessors[i], bv = json.bufferViews[a.bufferView], k = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 }[a.type];
+        const C = { 5126: Float32Array, 5125: Uint32Array, 5123: Uint16Array, 5121: Uint8Array }[a.componentType], B = C.BYTES_PER_ELEMENT;
+        const off = binOff + (bv.byteOffset || 0) + (a.byteOffset || 0), stride = bv.byteStride || k * B;
+        if (stride === k * B) return new C(buf.slice(off, off + a.count * k * B));
+        const out = new C(a.count * k), src = new DataView(buf);
+        const get = { 5126: 'getFloat32', 5125: 'getUint32', 5123: 'getUint16', 5121: 'getUint8' }[a.componentType];
+        for (let n = 0; n < a.count; n++) for (let c = 0; c < k; c++) out[n * k + c] = src[get](off + n * stride + c * B, true);
+        return out;
+      };
+      const pr = json.meshes[0].primitives[0];
+      const geo = new T.BufferGeometry();
+      geo.setAttribute('position', new T.BufferAttribute(acc(pr.attributes.POSITION), 3));
+      if (pr.attributes.NORMAL != null) geo.setAttribute('normal', new T.BufferAttribute(acc(pr.attributes.NORMAL), 3)); else geo.computeVertexNormals();
+      geo.setAttribute('uv', new T.BufferAttribute(acc(pr.attributes.TEXCOORD_0), 2));
+      geo.setIndex(new T.BufferAttribute(acc(pr.indices), 1));
+      const im = json.images[0], [io, il] = view(im.bufferView);
+      const bmp = await createImageBitmap(new Blob([new Uint8Array(buf, io, il)], { type: im.mimeType }));
+      const tex = new T.Texture(bmp); tex.flipY = false; tex.needsUpdate = true;
+      const mat = toon({ map: tex, color: '#a9c4b8' });
+      mat.onBeforeCompile = sh => {
+        sh.uniforms.uTime = P.uTime; sh.uniforms.uPoke = P.uPoke;
+        sh.vertexShader = 'uniform float uTime; uniform float uPoke;\n' + sh.vertexShader.replace('#include <begin_vertex>', `
+          vec3 transformed = vec3(position);
+          float ax = abs(position.x), sx = position.x < 0.0 ? -1.0 : 1.0;
+          // 模型的头顶偏扁：把眼睛以上的颅顶往上拉高，像参考图那样的大圆颅
+          float hw = (1.0 - smoothstep(0.05, 0.095, ax)) * smoothstep(0.17, 0.26, position.z) * smoothstep(0.385, 0.40, position.y);
+          transformed.y += hw * (position.y - 0.39) * 1.3;
+          transformed.z -= hw * (position.y - 0.39) * 0.6;
+          // 蝠翼：绕肩慢慢开合
+          float ww = smoothstep(0.08, 0.22, ax) * smoothstep(0.24, 0.36, position.y) * (1.0 - smoothstep(0.12, 0.3, position.z));
+          float ang = ww * (sin(uTime * 0.8) * 0.10 + 0.02) * sx;
+          vec2 piv = vec2(sx * 0.08, 0.33), r = transformed.xy - piv;
+          transformed.xy = piv + vec2(cos(ang) * r.x - sin(ang) * r.y, sin(ang) * r.x + cos(ang) * r.y);
+          transformed.z -= ww * sin(uTime * 0.8 + 0.6) * 0.02 * (ax - 0.08) * 6.0;
+          // 面须：越往下晃得越厉害，被戳时乱颤
+          float bw = (1.0 - smoothstep(0.34, 0.38, position.y)) * smoothstep(0.24, 0.32, position.z) * (1.0 - smoothstep(0.1, 0.16, ax));
+          float dep = clamp((0.37 - position.y) / 0.22, 0.0, 1.0);
+          transformed.x += bw * dep * (sin(uTime * 1.3 + position.y * 40.0 + position.x * 30.0) * 0.007 + uPoke * sin(uTime * 15.0 + position.y * 60.0) * 0.012);
+          transformed.z += bw * dep * cos(uTime * 1.1 + position.y * 30.0 + position.x * 20.0) * 0.006;`);
+      };
+      P.uTime = { value: 0 }; P.uPoke = { value: 0 };
+      // 编号通道里模型改写深度（r/g 两字节，b=255 作记号），描边时按深度跳变找出触手之间的轮廓
+      const dmat = new T.MeshBasicMaterial();
+      dmat.onBeforeCompile = sh => {
+        mat.onBeforeCompile(sh);
+        sh.vertexShader = sh.vertexShader.replace('void main() {', 'varying float vDep;\nvoid main() {').replace('#include <project_vertex>', '#include <project_vertex>\n vDep = -mvPosition.z;');
+        sh.fragmentShader = 'varying float vDep;\n' + sh.fragmentShader.replace(/}\s*$/, ' float dq = clamp(vDep / 100.0, 0.0, 1.0) * 255.0; gl_FragColor = vec4(floor(dq) / 255.0, fract(dq), 1.0, 1.0);\n}');
+      };
+      const m = new T.Mesh(geo, mat);
+      m.frustumCulled = false;
+      m.scale.setScalar(MS);
+      m.position.set(0, 0.12 - ANCHOR[1] * MS, 1.17 - ANCHOR[2] * MS);   // 让模型的眼睛落在原来眼睛的位置
+      tagId(m); m.userData.idMat = dmat;
+      const DBG = window.GBE_DBG || '';
+      if (DBG === 'basic') m.material = new T.MeshBasicMaterial({ map: tex });
+      P.model = m; if (DBG !== 'noadd') group.add(m);
+      for (const o of P.proc) o.visible = false;
+      for (const t of P.procTents) t.mesh.visible = false;
+      for (const e of P.eyes) { e.base.copy(mpos(e.sd * MODEL_EYE[0], MODEL_EYE[1], MODEL_EYE[2])); e.es = 0.45; e.eye.rotation.z = e.sd * 0.35; }
+      M3.fog = 0.3;
+      M3.model = true;
+    } catch (e) { console.warn('克苏鲁模型载入失败，用手捏版', e); }
   }
 
   // 局部坐标（u 单位，y 向上，z 朝镜头）→ three 世界坐标
@@ -246,13 +328,14 @@
     M.eyeScreen = [];
     const ptr = G.pointer;
     for (const e of P.eyes) {
-      e.eye.scale.y = Math.max(0.04, 0.42 * open);
+      e.eye.position.copy(e.base); e.eye.scale.set(1.35 * e.es, Math.max(0.04, 0.42 * open) * e.es, 0.5 * e.es);
       e.eye.material.color.copy(ic);
       e.lt.color.copy(ic); e.lt.intensity = 0.9 * open;
-      const es = t2s(L(e.sd * 0.55, 0.12, 1.17));
+      const es = t2s(L(e.base.x, e.base.y, e.base.z));
       let ox = 0, oy = 0;
       if (ptr) { const dx = ptr.x - es[0], dy = ptr.y - es[1], dd = Math.hypot(dx, dy) || 1, k = Math.min(1, dd / 60) * 0.08; ox = (dx / dd) * k; oy = -(dy / dd) * k * 0.3; }
-      e.core.position.set(e.sd * 0.55 + ox, 0.12 + oy * open, 1.24);
+      e.core.position.set(e.base.x + ox * e.es, e.base.y + oy * open * e.es, e.base.z + 0.07 * e.es); e.core.scale.setScalar(e.es);
+      e.lt.position.set(e.base.x, e.base.y - 0.12 * e.es, e.base.z + 0.28 * e.es);
       e.core.visible = open > 0.15;
       M.eyeScreen.push([es[0], es[1], open]);
     }
@@ -278,6 +361,17 @@
       M.facePaths[i] = tt.screen();
     }
 
+    if (P.model) {
+      // 模型的面须：用 6 条竖线当点击区域，戳中时整把面须乱颤
+      let pk = 0;
+      for (let i = 0; i < 6; i++) {
+        const mx = [-0.06, -0.035, -0.012, 0.012, 0.035, 0.06][i], pts = [];
+        for (let j = 0; j <= 5; j++) { const y = 0.37 - j * 0.045; const v = mpos(mx, y, 0.43 - j * 0.01); pts.push(t2s(L(v.x, v.y, v.z))); }
+        M.facePaths[i] = pts.map(p => [p[0], p[1]]);
+        pk = Math.max(pk, Math.max(0, 1.2 - M.faceSq[i].t) / 1.2);
+      }
+      P.uPoke.value = pk; P.uTime.value = time;
+    }
     // 身后的粗触手：左右各三条，波浪着伸出屏幕
     const halfW = (W / 2) / M.u;
     let bi = 0;
@@ -357,12 +451,16 @@
     idx2.clearRect(0, 0, W, H); idx2.drawImage(glc, 0, 0);
     const id = idx2.getImageData(0, 0, W, H).data;
     // WebGL 有抖动，编号色按 32 一档取整
-    const key = i => { if (id[i * 4 + 3] < 100) return -1; const r = id[i * 4] >> 5, g = id[i * 4 + 1] >> 5, b = id[i * 4 + 2] >> 5; return (r | g | b) ? (r << 6) | (g << 3) | b : -1; };
+    const dep = i => id[i * 4] * 255 + id[i * 4 + 1];
+    const DT = 0.5 / 100 * 65025;
+    const key = i => { if (id[i * 4 + 3] < 100) return -1; if (id[i * 4 + 2] > 247) return 99999; const r = id[i * 4] >> 5, g = id[i * 4 + 1] >> 5, b = id[i * 4 + 2] >> 5; return (r | g | b) ? (r << 6) | (g << 3) | b : -1; };
     for (let y = 0; y < H - 1; y++) for (let x = 0; x < W - 1; x++) {
       const i = y * W + x; if (!A[i]) continue;
       const a = key(i); if (a < 0) continue;
       const r = key(i + 1), b = key(i + W);
-      if ((r >= 0 && r !== a) || (b >= 0 && b !== a)) { const q = i * 4; d[q] = d[q] * 0.3 + 2; d[q + 1] = d[q + 1] * 0.3 + 6; d[q + 2] = d[q + 2] * 0.3 + 5; }
+      let edge = (r >= 0 && r !== a) || (b >= 0 && b !== a);
+      if (!edge && a === 99999) { const d0 = dep(i); edge = (r === a && Math.abs(dep(i + 1) - d0) > DT) || (b === a && Math.abs(dep(i + W) - d0) > DT); }
+      if (edge) { const q = i * 4; d[q] = d[q] * 0.3 + 2; d[q + 1] = d[q + 1] * 0.3 + 6; d[q + 2] = d[q + 2] * 0.3 + 5; }
     }
     // 黑雾：脸藏在会飘动的阴影里（拜耳抖动成像素点），只留眼睛的光
     const fc = t2s(L(0, 0.0, 1.0)), uu = M.u;

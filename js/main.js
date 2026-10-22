@@ -80,7 +80,7 @@
       const best = save.best && save.best[lv.id];
       const el = document.createElement('div');
       el.className = 'lv' + (unlocked ? '' : ' locked');
-      el.innerHTML = `<div class="no">${unlocked ? ['壹','贰','叁','肆'][lv.id - 1] : '封'}</div><div><h3>${lv.name}</h3><p>${unlocked ? lv.desc : (lv.ready ? '先熬过上一夜' : '封印未解 · 敬请期待')}</p></div>` + (best != null ? `<span class="badge">最高 San ${best}</span>` : '');
+      el.innerHTML = `<div class="no">${['I','II','III','IV','V'][lv.id - 1]}</div><div><h3>${lv.name}</h3><p>${unlocked ? lv.desc : (lv.ready ? '先熬过上一夜' : '封印未解 · 敬请期待')}</p></div>` + (best != null ? `<span class="badge">最高 San ${best}</span>` : '');
       if (unlocked) el.onclick = () => startLevel(lv.id);
       box.appendChild(el);
     });

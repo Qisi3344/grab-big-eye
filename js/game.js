@@ -2,23 +2,24 @@
 (function () {
   const G = window.G;
   const ROT = -0.035;               // 祭盘随手摆歪一点
-  G.BOARD_C = [0, 3.5];
+  G.BOARD_C = [0, 3.9];
+  G.SP = 1.2;               // 供品间距
   G.TILE_HALF = 0.45;
   G.BOARD_TOP = 0.2;
   G.LAYER_H = 0.24;
   G.SLOT_N = 7;
-  G.SLOT_Z = -0.62;
+  G.SLOT_Z = -1.55;
   G.SLOT_HALF = 0.42;
 
   G.boardToWorld = function (gx, gy) {
-    const x = gx - 2.5, z = 5.5 - gy;
+    const x = (gx - 2.5) * G.SP, z = G.BOARD_C[1] + (2 - gy) * G.SP;
     const dx = x - G.BOARD_C[0], dz = z - G.BOARD_C[1];
     const c = Math.cos(ROT), s = Math.sin(ROT);
     return [G.BOARD_C[0] + dx * c - dz * s, G.BOARD_C[1] + dx * s + dz * c];
   };
   G.boardRot = ROT;
   G.tileTopH = layer => G.BOARD_TOP + (layer + 1) * G.LAYER_H;
-  G.slotX = i => (i - 3) * 1.02;
+  G.slotX = i => (i - 3) * 1.08;
 
   const S = (G.S = {});
 
@@ -82,7 +83,7 @@
     if (!G.canGrab(t)) return false;
     t.alive = false;
     const [wx, wz] = G.boardToWorld(t.gx, t.gy);
-    const item = { type: t.type, tile: t, x: wx, z: wz, h: G.tileTopH(t.layer), fly: 1 };
+    const item = { type: t.type, tile: t, x: wx, z: wz, h: G.baseH(t.layer), fly: 1 };
     insertSlot(item);
     S.history.push(item);
     S.grabs++;

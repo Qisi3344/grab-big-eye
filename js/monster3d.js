@@ -221,7 +221,7 @@
 
   // —— 外部模型（Tripo 生成的半身克苏鲁，assets/cthulhu.glb）——
   // 自己解析 GLB（单网格 + 一张底色贴图），省掉 GLTFLoader
-  const MODEL_TILT = 0.4, MS = 17, MODEL_HEAD = [0, 0.44, 0.3], MODEL_EYE = [0.03, 0.378, 0.452], ANCHOR = [0.03, 0.40, 0.425];
+  const MODEL_TILT = 0.4, MS = 17, MODEL_HEAD = [0, 0.44, 0.3], MODEL_EYE = [0.022, 0.352, 0.462], ANCHOR = [0.03, 0.40, 0.425];
   function mpos(x, y, z) { return new T.Vector3(x, y, z).multiplyScalar(MS).add(P.model.position).applyEuler(P.pivot.rotation).add(P.pivot.position); }
   async function loadModel() {
     if (typeof fetch === 'undefined' || /[?&]proc\b/.test(location.search)) return;

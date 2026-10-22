@@ -3,11 +3,11 @@
 // 没有 WebGL / 没有 THREE 时，monster.js 里的 2D 画法自动兜底。
 (function () {
   const G = window.G, S = G.S, M = G.M;
-  const M3 = (G.M3 = { ok: false, tried: false });
+  const M3 = (G.M3 = { ok: false, tried: false, fog: 1 });
   const U = 1.6;                       // 一个「u」= 1.6 世界单位（与 2D 版 M.u 对应）
   const C = [0, 2.6, 10.6];            // 克苏鲁的锚点（游戏坐标）
   const TAU = Math.PI * 2;
-  let T, renderer, scene, camera, glc, tmpc, tmpx, group, gm, stoneMat, lastW = 0, lastH = 0;
+  let T, renderer, scene, camera, glc, tmpc, tmpx, idc, idx2, hideMat, group, gm, stoneMat, lastW = 0, lastH = 0;
   const P = {};
 
   // 游戏坐标 (x 右, y 上, z 向远) → three 坐标 (z 朝向镜头)
@@ -26,6 +26,7 @@
       renderer.setClearColor(0x000000, 0);
     } catch (e) { console.warn('WebGL 不可用，使用 2D 克苏鲁', e); return; }
     tmpc = document.createElement('canvas'); tmpx = tmpc.getContext('2d', { willReadFrequently: true });
+    idc = document.createElement('canvas'); idx2 = idc.getContext('2d', { willReadFrequently: true });
     scene = new T.Scene();
     camera = new T.PerspectiveCamera();
     camera.matrixAutoUpdate = true;
@@ -98,6 +99,7 @@
     this.geo = geo;
     this.mesh = new T.Mesh(geo, stoneMat);
     this.mesh.frustumCulled = false;
+    tagId(this.mesh);
     scene.add(this.mesh);
   }
   const _t = [], _n = [];
@@ -144,18 +146,28 @@
   };
   Tent.prototype.screen = function () { return this.pts.map(t2s).map(p => [p[0], p[1]]); };
 
+  // 每个部件一个编号色，用来画部件之间的内描边
+  let nextId = 1;
+  function tagId(mesh, id) {
+    id = id || nextId++;
+    mesh.userData.idMat = new T.MeshBasicMaterial({ color: new T.Color(((id * 3) % 8) * 32 / 255 + 16 / 255, ((id * 5 + 2) % 8) * 32 / 255 + 16 / 255, (Math.floor(id / 8) % 8) * 32 / 255 + 16 / 255), side: T.DoubleSide });
+    mesh.userData.id = id;
+    return id;
+  }
   function build() {
     const d = new Uint8Array([28, 28, 28, 255, 85, 85, 85, 255, 160, 160, 160, 255, 255, 255, 255, 255]);
     gm = new T.DataTexture(d, 4, 1); gm.minFilter = gm.magFilter = T.NearestFilter; gm.generateMipmaps = false; gm.needsUpdate = true;
     stoneMat = toon({ vertexColors: true });
+    hideMat = new T.MeshBasicMaterial({ color: 0x000000 });
     P.moss = new T.Color('#3e6e2f'); P.suck = new T.Color('#7a4a44'); P.red = new T.Color('#c0301f');
-    const headMat = toon({ color: '#4e5c57', map: stoneTexture() });
-    const faceMat = toon({ color: '#47564f' });
+    const headMat = toon({ color: '#47554f', map: stoneTexture() });
+    const faceMat = toon({ color: '#3d4d47' });
+    const darkFace = toon({ color: '#1c2824' });
     const darkMat = new T.MeshBasicMaterial({ color: '#020605' });
 
     // 光：幽暗的青色环境光 + 头顶的冷月光 + 眼睛的绿光 + 供盘方向的一点暖光
     scene.add(new T.AmbientLight('#2c4a43', 0.32));
-    const moon = new T.DirectionalLight('#b4e2d2', 1.05); moon.position.set(-7, 13, 3); scene.add(moon); scene.add(moon.target); moon.target.position.set(0, 0, -11);
+    const moon = new T.DirectionalLight('#b4e2d2', 1.05); moon.position.set(-5, 15, -1); scene.add(moon); scene.add(moon.target); moon.target.position.set(0, 0, -11);
     const rim = new T.DirectionalLight('#5fb8a0', 0.55); rim.position.set(3, 8, -30); scene.add(rim); scene.add(rim.target); rim.target.position.set(0, 2, -10);
     const warm = new T.PointLight('#d08a40', 0.6, 18, 1.2); warm.position.copy(g2t(0, 1.5, 4)); scene.add(warm);
 
@@ -166,34 +178,37 @@
 
     // 头颅（高圆顶）+ 下颌
     P.head = blob(1.62, 1.55, 1.3, headMat, 0.035, 32); P.head.position.set(0, 1.35, -0.35); group.add(P.head);
-    P.jaw = blob(1.35, 0.95, 1.0, faceMat, 0.04); P.jaw.position.set(0, -0.05, 0.2); group.add(P.jaw);
+    const FACE = tagId(P.head), BROW = nextId++, CHEEK = nextId++;
+    // 下半张脸是暗的肉，几乎全被面须盖住
+    P.jaw = blob(1.2, 0.8, 0.9, darkFace, 0.05); P.jaw.position.set(0, -0.35, 0.15); group.add(P.jaw); tagId(P.jaw);
     // 鳍耳
     for (const sd of [-1, 1]) {
       const sh = new T.Shape();
       sh.moveTo(0, 0.9); sh.lineTo(sd * 1.05, 1.15); sh.lineTo(sd * 0.95, -0.15); sh.lineTo(sd * 0.55, -0.75); sh.lineTo(0, -0.4); sh.closePath();
-      const fin = new T.Mesh(new T.ShapeGeometry(sh), toon({ color: '#1d2e29', side: T.DoubleSide }));
-      fin.position.set(sd * 1.05, 0.15, -0.35); fin.rotation.y = -sd * 0.5; group.add(fin);
+      const fin = new T.Mesh(new T.ShapeGeometry(sh), toon({ color: '#16241f', side: T.DoubleSide }));
+      fin.position.set(sd * 1.05, 0.15, -0.35); fin.rotation.y = -sd * 0.5; group.add(fin); tagId(fin);
     }
-    // 鼻梁、两颊、眉骨（怒相：外高内低）
-    const nose = blob(0.24, 0.55, 0.3, faceMat, 0.05, 16); nose.position.set(0, -0.25, 1.0); group.add(nose);
+    // 面部：V 字眉骨在鼻根处汇合压低，鼻梁一路下来，颧骨突出
+    const nose = blob(0.16, 0.5, 0.22, faceMat, 0.05, 16); nose.position.set(0, -0.12, 1.08); group.add(nose); tagId(nose, FACE);
+    const glab = blob(0.2, 0.2, 0.25, headMat, 0.04, 14); glab.position.set(0, 0.2, 1.12); group.add(glab); tagId(glab, BROW);
     for (const sd of [-1, 1]) {
-      const cheek = blob(0.5, 0.38, 0.4, faceMat, 0.05, 16); cheek.position.set(sd * 0.66, -0.42, 0.82); group.add(cheek);
-      const brow = blob(0.72, 0.21, 0.42, headMat, 0.06, 18); brow.position.set(sd * 0.6, 0.32, 1.08); brow.rotation.z = sd * 0.45; brow.rotation.x = 0.25; group.add(brow);
-      const sock = blob(0.36, 0.22, 0.12, darkMat, 0, 14); sock.position.set(sd * 0.6, 0.04, 1.12); group.add(sock);
+      const cheek = blob(0.42, 0.28, 0.36, faceMat, 0.05, 16); cheek.position.set(sd * 0.72, -0.28, 0.86); cheek.rotation.z = -sd * 0.3; group.add(cheek); tagId(cheek, CHEEK);
+      const brow = blob(0.66, 0.16, 0.36, headMat, 0.07, 18); brow.position.set(sd * 0.5, 0.36, 1.12); brow.rotation.z = sd * 0.5; brow.rotation.y = -sd * 0.25; group.add(brow); tagId(brow, BROW);
+      const sock = blob(0.3, 0.13, 0.1, darkMat, 0, 14); sock.position.set(sd * 0.55, 0.12, 1.12); sock.rotation.z = sd * 0.42; group.add(sock);
     }
-    // 眼：发光的绿球 + 跟随指针的亮核
+    // 眼：斜着眯起的绿光细眼 + 跟随指针的亮核
     P.eyes = [];
     for (const sd of [-1, 1]) {
-      const eye = new T.Mesh(new T.SphereGeometry(0.17, 14, 10), new T.MeshBasicMaterial({ color: '#2fe37a' }));
-      eye.position.set(sd * 0.6, 0.04, 1.18); eye.scale.set(1.25, 0.72, 0.5); group.add(eye);
-      const core = new T.Mesh(new T.SphereGeometry(0.075, 10, 8), new T.MeshBasicMaterial({ color: '#e6fff0' }));
+      const eye = new T.Mesh(new T.SphereGeometry(0.16, 14, 10), new T.MeshBasicMaterial({ color: '#2fe37a' }));
+      eye.position.set(sd * 0.55, 0.12, 1.17); eye.rotation.z = sd * 0.42; eye.scale.set(1.35, 0.42, 0.5); group.add(eye);
+      const core = new T.Mesh(new T.SphereGeometry(0.06, 10, 8), new T.MeshBasicMaterial({ color: '#e6fff0' }));
       group.add(core);
-      const lt = new T.PointLight('#3cff8c', 0.6, 2.2, 2); lt.position.set(sd * 0.6, -0.1, 1.5); group.add(lt);
+      const lt = new T.PointLight('#3cff8c', 0.9, 1.6, 2); lt.position.set(sd * 0.55, 0.0, 1.45); group.add(lt);
       P.eyes.push({ sd, eye, core, lt });
     }
 
     // 触手们
-    P.face = []; for (let i = 0; i < 6; i++) P.face.push(new Tent(i * 3 + 1, i % 2 ? '#52665d' : '#45574f'));
+    P.face = []; for (let i = 0; i < 6; i++) P.face.push(new Tent(i * 3 + 1, i % 2 ? '#4a6158' : '#3e544b'));
     P.back = []; for (let i = 0; i < 6; i++) P.back.push(new Tent(20 + i, '#26352f'));
     P.loops = []; for (let i = 0; i < 4; i++) P.loops.push(new Tent(40 + i, '#34463f'));
     P.curls = []; for (let i = 0; i < 4; i++) P.curls.push(new Tent(50 + i, '#24332e'));
@@ -207,7 +222,7 @@
   function bez(a, c, b, n) { const out = []; for (let i = 0; i <= n; i++) { const t = i / n, u = 1 - t; out.push([u * u * a[0] + 2 * u * t * c[0] + t * t * b[0], u * u * a[1] + 2 * u * t * c[1] + t * t * b[1]]); } return out; }
 
   M3.render = function (ctx, time, dt, W, H) {
-    if (W !== lastW || H !== lastH) { renderer.setSize(W, H, false); tmpc.width = W; tmpc.height = H; lastW = W; lastH = H; }
+    if (W !== lastW || H !== lastH) { renderer.setSize(W, H, false); tmpc.width = idc.width = W; tmpc.height = idc.height = H; lastW = W; lastH = H; }
     // 相机：与 G.proj 完全一致
     const cam = G.cam;
     camera.position.set(0, cam.ch, -cam.cz);
@@ -231,13 +246,13 @@
     M.eyeScreen = [];
     const ptr = G.pointer;
     for (const e of P.eyes) {
-      e.eye.scale.y = Math.max(0.04, 0.72 * open);
+      e.eye.scale.y = Math.max(0.04, 0.42 * open);
       e.eye.material.color.copy(ic);
-      e.lt.color.copy(ic); e.lt.intensity = 0.6 * open;
-      const es = t2s(L(e.sd * 0.6, 0.06, 1.1));
+      e.lt.color.copy(ic); e.lt.intensity = 0.9 * open;
+      const es = t2s(L(e.sd * 0.55, 0.12, 1.17));
       let ox = 0, oy = 0;
-      if (ptr) { const dx = ptr.x - es[0], dy = ptr.y - es[1], dd = Math.hypot(dx, dy) || 1, k = Math.min(1, dd / 60) * 0.1; ox = (dx / dd) * k; oy = -(dy / dd) * k * 0.6; }
-      e.core.position.set(e.sd * 0.6 + ox, 0.04 + oy * open, 1.27);
+      if (ptr) { const dx = ptr.x - es[0], dy = ptr.y - es[1], dd = Math.hypot(dx, dy) || 1, k = Math.min(1, dd / 60) * 0.08; ox = (dx / dd) * k; oy = -(dy / dd) * k * 0.3; }
+      e.core.position.set(e.sd * 0.55 + ox, 0.12 + oy * open, 1.24);
       e.core.visible = open > 0.15;
       M.eyeScreen.push([es[0], es[1], open]);
     }
@@ -256,10 +271,10 @@
         const pinch = -k * 0.25 * Math.sin(Math.PI * Math.min(1, t * 1.3));
         const flare = k * (0.9 + ak * 0.6) * Math.pow(t, 3);
         const curl = ak > 0.6 ? Math.pow(Math.max(0, t - 0.7) / 0.3, 2) * 0.6 : 0;
-        ctrl.push(L(k * 0.95 + pinch + flare + sway, -0.5 - (1 - ak) * 0.12 - len * t + curl, 0.95 + 0.25 * t + Math.cos(time * 0.9 + i + t * 2) * 0.05));
+        ctrl.push(L(k * 0.78 + pinch + flare + sway, -0.28 - (1 - ak) * 0.1 - ak * 0.12 - len * t + curl, 1.0 + 0.3 * t - ak * 0.12 + Math.cos(time * 0.9 + i + t * 2) * 0.05));
       }
       const tt = P.face[i];
-      tt.update(ctrl, (0.5 - ak * 0.1) * U, 0.07 * U, { sq, suck: dirL(k < 0 ? 1 : -1, -0.2, 0.5), suckColor: P.red });
+      tt.update(ctrl, (0.4 - ak * 0.06) * U, 0.07 * U, { sq, suck: dirL(k < 0 ? 1 : -1, -0.2, 0.5), suckColor: P.red });
       M.facePaths[i] = tt.screen();
     }
 
@@ -333,6 +348,42 @@
       if (A[i]) { d[q + 3] = 255; continue; }
       if ((x > 0 && A[i - 1]) || (x < W - 1 && A[i + 1]) || (y > 0 && A[i - W]) || (y < H - 1 && A[i + W])) { d[q] = 3; d[q + 1] = 8; d[q + 2] = 7; d[q + 3] = 255; }
       else d[q + 3] = 0;
+    }
+    // 编号色再渲染一遍：相邻像素属于不同部件时压暗，得到像素画式的内描边
+    const swap = [];
+    scene.traverse(o => { if (o.isMesh) { swap.push([o, o.material]); o.material = o.userData.idMat || hideMat; } });
+    renderer.render(scene, camera);
+    for (const [o, m] of swap) o.material = m;
+    idx2.clearRect(0, 0, W, H); idx2.drawImage(glc, 0, 0);
+    const id = idx2.getImageData(0, 0, W, H).data;
+    // WebGL 有抖动，编号色按 32 一档取整
+    const key = i => { if (id[i * 4 + 3] < 100) return -1; const r = id[i * 4] >> 5, g = id[i * 4 + 1] >> 5, b = id[i * 4 + 2] >> 5; return (r | g | b) ? (r << 6) | (g << 3) | b : -1; };
+    for (let y = 0; y < H - 1; y++) for (let x = 0; x < W - 1; x++) {
+      const i = y * W + x; if (!A[i]) continue;
+      const a = key(i); if (a < 0) continue;
+      const r = key(i + 1), b = key(i + W);
+      if ((r >= 0 && r !== a) || (b >= 0 && b !== a)) { const q = i * 4; d[q] = d[q] * 0.3 + 2; d[q + 1] = d[q + 1] * 0.3 + 6; d[q + 2] = d[q + 2] * 0.3 + 5; }
+    }
+    // 黑雾：脸藏在会飘动的阴影里（拜耳抖动成像素点），只留眼睛的光
+    const fc = t2s(L(0, 0.0, 1.0)), uu = M.u;
+    const blobs = [[fc[0], fc[1] + uu * 0.3, uu * 2.1, uu * 2.3, 1.35], [fc[0], fc[1] - uu * 1.4, uu * 1.9, uu * 1.4, 0.55]];
+    for (let k = 0; k < 6; k++) {
+      const ph = k * 1.9;
+      blobs.push([fc[0] + Math.sin(time * 0.23 + ph) * uu * 1.6, fc[1] + uu * (0.4 + Math.cos(time * 0.17 + ph * 1.3) * 0.9), uu * (0.9 + 0.3 * Math.sin(ph)), uu * 0.8, 0.45]);
+    }
+    const BY = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+    const x0 = Math.max(0, Math.floor(fc[0] - uu * 3.4)), x1 = Math.min(W, Math.ceil(fc[0] + uu * 3.4));
+    const y0 = Math.max(0, Math.floor(fc[1] - uu * 2.8)), y1 = Math.min(H, Math.ceil(fc[1] + uu * 3.2));
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+      const i = y * W + x; if (!A[i]) continue;
+      const q = i * 4;
+      let f = 0;
+      for (const [bx, by, rx, ry, a] of blobs) { const dx = (x - bx) / rx, dy = (y - by) / ry, r2 = dx * dx + dy * dy; if (r2 < 1) f += a * (1 - r2) * (1 - r2); }
+      // 眼睛周围雾渐薄，眼光透出来
+      for (const [ex, ey] of M.eyeScreen) { const dx = (x - ex) / (uu * 0.3), dy = (y - ey) / (uu * 0.15), r = Math.sqrt(dx * dx + dy * dy); if (r < 1.6) f *= Math.max(0, (r - 0.6) / 1.0); }
+      f = Math.min(1, f) * M3.fog;
+      const lv = Math.min(4, Math.floor(f * 4 + BY[(y & 3) * 4 + (x & 3)] / 16)) / 4;
+      if (lv > 0) { const m = 1 - 0.92 * lv; d[q] = d[q] * m + 1 * lv; d[q + 1] = d[q + 1] * m + 4 * lv; d[q + 2] = d[q + 2] * m + 4 * lv; }
     }
     tmpx.putImageData(img, 0, 0);
     ctx.drawImage(tmpc, 0, 0);

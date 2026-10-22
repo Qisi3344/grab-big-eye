@@ -23,6 +23,12 @@
 
   const S = (G.S = {});
 
+  // 关卡表：第二关还在设计，先占位锁着
+  G.LEVELS = [
+    { id: 1, name: '第一夜 · 七眼祭盘', desc: '63 件供品，三层，一只盯着你的眼', ready: true },
+    { id: 2, name: '第二夜 · ？？？', desc: '封印未解', ready: false },
+  ];
+  G.level = 1;
   G.newGame = function () {
     S.tiles = G.newBoard();
     S.slot = [];

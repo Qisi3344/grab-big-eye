@@ -492,11 +492,12 @@
     G.say(steal ? '它伸手了……' : '一条触手压了下来', 1.6);
   };
 
+  const offscreen = () => !!(G.M3 && G.M3.model) || G.EV_OFFSCREEN;
   function evOrigin(sd) { return [M.hx + sd * M.u * 1.3, M.hy + M.u * 0.9]; }
   const PRESS_H = 1.75;
 
   function stealPath(ev) {
-    const base = evOrigin(1);
+    let base = evOrigin(1);
     let tip;
     const tg = ev.targets && ev.targets.length ? ev.targets : G.stealTargets();
     if (tg.length) {
@@ -505,7 +506,9 @@
       tip = [sx / tg.length, sy / tg.length];
     } else tip = G.proj(G.slotX(3), 0.2, G.SLOT_Z);
     ev.tip = tip;
-    const c = [(base[0] + tip[0]) / 2 + M.u * 1.6, Math.min(base[1], tip[1]) - M.u * 0.8];
+    // 有模型时从镜头外（右侧屏幕外）伸进来，不从克苏鲁身上长出来（她 2026-10-22）
+    if (offscreen()) base = [G.cam.cx * 2 + M.u * 1.4, tip[1] - M.u * 0.6];
+    const c = offscreen() ? [(base[0] + tip[0]) / 2, Math.min(base[1], tip[1]) - M.u * 1.1] : [(base[0] + tip[0]) / 2 + M.u * 1.6, Math.min(base[1], tip[1]) - M.u * 0.8];
     let upto = 0;
     if (ev.phase === 'reach') upto = ev.t / ev.dur;
     else if (ev.phase === 'grab' || ev.phase === 'hurt') upto = ev.reachAt || 1;
@@ -523,8 +526,9 @@
       const w = Math.sin(S.time * 2 + i * 0.7) * 0.05;
       return G.proj(x + o[0], h + lift, z + o[1] + w);
     });
-    const base = evOrigin(-1), first = pts[0];
-    const c = [base[0] - M.u * 0.8, (base[1] + first[1]) / 2 - M.u * 0.4];
+    const first = pts[0];
+    const base = offscreen() ? [-M.u * 1.4, first[1] - M.u * 0.4] : evOrigin(-1);
+    const c = offscreen() ? [(base[0] + first[0]) / 2, Math.min(base[1], first[1]) - M.u * 0.5] : [base[0] - M.u * 0.8, (base[1] + first[1]) / 2 - M.u * 0.4];
     return G.bezier(base, c, first, 10).concat(pts.slice(1).map(p => [p[0], p[1]]));
   }
 

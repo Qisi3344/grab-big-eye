@@ -308,7 +308,7 @@
     const madness = 1 - S.san / 100;
     if (R.noise.length) {
       ctx.globalAlpha = 0.05 + madness * 0.13;
-      ctx.drawImage(R.noise[Math.floor(time * 24) % 4], 0, 0);
+      ctx.drawImage(R.noise[((Math.floor(time * 24) % 4) + 4) % 4], 0, 0);
       ctx.globalAlpha = 1;
     }
     const g = ctx.createRadialGradient(W / 2, H * 0.6, Math.min(W, H) * (0.32 - madness * 0.12), W / 2, H * 0.6, Math.max(W, H) * 0.7);

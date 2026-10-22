@@ -5,8 +5,8 @@
   const M = (G.M = {});
   const TAU = Math.PI * 2;
 
-  const PAL_FACE = { out: '#050604', dark: '#121810', body: '#252e1f', light: '#56634a', sucker: '#6e5058' };
-  const PAL_EVENT = { out: '#050306', dark: '#1a0c1e', body: '#3a2042', light: '#7c5a86', sucker: '#8f6670' };
+  const PAL_FACE = { out: '#030807', dark: '#0e1c19', body: '#24392f', light: '#5f8270', sucker: '#6e2c26', moss: '#3f6e34' };
+  const PAL_EVENT = { out: '#030807', dark: '#11221d', body: '#2b4438', light: '#6f9480', sucker: '#82322a', moss: '#4a7e3a' };
 
   G.monsterReset = function () {
     M.faceSq = Array(9).fill(0).map(() => ({ t: 9 }));
@@ -50,7 +50,7 @@
     for (let i = 0; i < n; i++) { const r = rad(i); dot(P[i][0] - r * 0.15, P[i][1] - r * 0.22, r * 0.72, pal.body); }
     // 吸盘：沿路径一侧
     if (opt.suckers !== false) {
-      const every = Math.max(3, Math.round(r0 * 1.6));
+      const every = Math.max(4, Math.round(r0 * 2.4));
       for (let i = every; i < n - 2; i += every) {
         const r = rad(i);
         if (r < 1.6) continue;
@@ -59,53 +59,46 @@
         const l = Math.hypot(nx, ny) || 1; nx /= l; ny /= l;
         if (ny < 0) { nx = -nx; ny = -ny; }
         const lift = opt.lift ? opt.lift(i / (n - 1)) : 0;
-        const sx = P[i][0] + nx * r * 0.55, sy = P[i][1] + ny * r * 0.55 - lift;
-        dot(sx, sy, Math.max(0.8, r * 0.3), pal.sucker);
-        if (r > 3) dot(sx, sy, r * 0.12, pal.out);
+        const sx = P[i][0] + nx * r * 0.62, sy = P[i][1] + ny * r * 0.62 - lift;
+        dot(sx, sy, Math.max(0.7, r * 0.2), pal.sucker);
+        if (r > 4) dot(sx, sy, r * 0.08, pal.out);
       }
     }
     // 湿光
     for (let i = 0; i < n; i += 2) { const r = rad(i); if (r > 1.8) dot(P[i][0] - r * 0.38, P[i][1] - r * 0.48, Math.max(0.5, r * 0.18), pal.light); }
+    // 缠在上面的水草
+    if (pal.moss && opt.moss !== false) {
+      ctx.fillStyle = pal.moss;
+      const rr = G.mulberry(17 + (opt.seed || 0) * 13);
+      for (let i = 0; i < n; i++) {
+        const r = rad(i); if (r < 2.5 || rr() > 0.06) continue;
+        const ox = (rr() - 0.5) * r, oy = -r * (0.2 + rr() * 0.5);
+        for (let k = 0; k < 4; k++) ctx.fillRect(Math.round(P[i][0] + ox + (rr() - 0.5) * 3), Math.round(P[i][1] + oy + k), 1, 1);
+      }
+    }
     return P;
   };
 
   // —— 头的位置（屏幕） ——
   M.layout = function () {
-    const [hx, hy, s] = G.proj(0, 2.75, 10.2);
-    M.hx = hx; M.hy = hy; M.u = s * 1.3;
+    const [hx, hy, s] = G.proj(0, 2.6, 10.6);
+    M.hx = hx; M.hy = hy; M.u = s * 1.6;
+    M.ub = G.proj(0, 1.6, 3.5)[2];
   };
 
   // —— 背景石墙与眼墙 ——
   M.drawWall = function (ctx, W, H) {
-    const bottom = G.proj(0, 0, 9.4)[1] + 2;
+    const bottom = G.proj(0, 0, 9.2)[1];
     M.wallBottom = bottom;
-    const g = ctx.createLinearGradient(0, 0, 0, bottom);
-    g.addColorStop(0, '#030403'); g.addColorStop(1, '#141811');
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, bottom);
-    // 石砖
-    const r = G.mulberry(M.wallSeed);
-    const bh = Math.max(6, Math.round(M.u * 0.55));
-    for (let y = bottom - bh, row = 0; y > -bh; y -= bh, row++) {
-      const bw = bh * 2.1, off = row % 2 ? bw / 2 : 0;
-      const fade = G.clamp((y / bottom) * 1.3, 0, 1);
-      for (let x = -off; x < W; x += bw) {
-        const shade = Math.floor(9 + r() * 9);
-        ctx.fillStyle = `rgba(${shade + 2},${shade + 5},${shade - 2},${0.25 + 0.6 * fade})`;
-        ctx.fillRect(Math.round(x + 1), Math.round(y + 1), Math.round(bw - 2), bh - 2);
-        if (r() < 0.25) { ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(Math.round(x + bw * r()), Math.round(y + 2), 1, bh - 4); }
-        if (r() < 0.12) { ctx.fillStyle = 'rgba(40,20,14,0.6)'; ctx.fillRect(Math.round(x + bw * r()), Math.round(y + bh - 3), 1, 3 + Math.round(r() * 6)); }
-      }
-    }
     // 眼墙
     const san = S.san / 100;
     for (const e of M.wallEyes) {
       let x = e.u * W, y = 6 + e.v * (bottom - 22);
-      const dx = (x - M.hx) / (M.u * 2.6), dy = (y - M.hy) / (M.u * 2.5);
-      if (dx * dx + dy * dy < 1) x = dx < 0 ? M.hx - M.u * 2.7 - e.u * M.u : M.hx + M.u * 2.7 + e.u * M.u;
+      const dx = (x - M.hx) / (M.u * 2.2), dy = (y - M.hy) / (M.u * 2.4);
+      if (dx * dx + dy * dy < 1) x = dx < 0 ? M.hx - M.u * 2.3 - e.u * M.u : M.hx + M.u * 2.3 + e.u * M.u;
       e.sx = x; e.sy = y;
-      drawWallEye(ctx, x, y, Math.max(4, M.u * 0.42 * e.size), e.open, san);
+      drawWallEye(ctx, x, y, Math.max(4, M.u * 0.3 * e.size), e.open, san);
     }
-    ctx.fillStyle = '#060705'; ctx.fillRect(0, bottom - 2, W, 3);
   };
 
   function lookOffset(x, y, max) {
@@ -138,113 +131,142 @@
     ctx.beginPath(); ctx.ellipse(x, y, r, Math.max(0.6, r * 0.55 * open), 0, Math.PI * 1.05, Math.PI * 1.95); ctx.stroke();
   }
 
-  // —— 翅膀与身体（在桌面之前画，让桌沿挡住身体下半截） ——
-  M.drawBack = function (ctx, time) {
+  // —— 翅膀、身体、身后伸出屏幕的粗触手 ——
+  function waveBezier(a, c, b, n, time, amp, ph, u) {
+    const P = G.bezier(a, c, b, n);
+    return P.map(([x, y], i) => {
+      const t = i / n;
+      return [x + Math.sin(time * 0.7 + ph + t * 5) * amp * u * t, y + Math.cos(time * 0.6 + ph + t * 4) * amp * u * t];
+    });
+  }
+  M.drawBack = function (ctx, time, W, H) {
     const { hx, hy, u } = M;
     const flap = Math.sin(time * 0.8) * 0.12;
+    // 翅膀（大而暗，藏在水里）
     for (const sd of [-1, 1]) {
-      ctx.fillStyle = '#090b08';
-      ctx.strokeStyle = '#1b2217'; ctx.lineWidth = Math.max(1, u * 0.06);
-      const sx = hx + sd * u * 1.1, sy = hy + u * 0.4;
-      const tips = [[3.6, -2.2 - flap], [4.4, -0.9 - flap * 0.5], [4.2, 0.4], [3.4, 1.1]];
-      ctx.beginPath(); ctx.moveTo(sx, sy);
-      ctx.lineTo(hx + sd * u * 2.6, hy - u * (2.6 + flap));
-      tips.forEach(([tx, ty], i) => {
-        const px = hx + sd * u * tx, py = hy + u * ty;
-        const mx = hx + sd * u * (tx - 0.5), my = hy + u * (ty - 0.1);
-        ctx.quadraticCurveTo(mx, my, px, py);
-      });
+      ctx.fillStyle = '#061311'; ctx.strokeStyle = '#173028'; ctx.lineWidth = Math.max(1, u * 0.05);
+      const sx = hx + sd * u * 1.2, sy = hy - u * 0.2;
+      const top = [hx + sd * u * 2.4, hy - u * (3.0 + flap)];
+      const tips = [[3.9, -2.4 - flap], [4.6, -1.1 - flap * 0.5], [4.3, 0.3], [3.3, 1.0]];
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(top[0], top[1]);
+      tips.forEach(([tx, ty]) => ctx.quadraticCurveTo(hx + sd * u * (tx - 0.6), hy + u * (ty - 0.1), hx + sd * u * tx, hy + u * ty));
       ctx.lineTo(sx, sy + u * 0.8); ctx.closePath(); ctx.fill();
-      // 翼骨
       ctx.beginPath();
-      tips.forEach(([tx, ty]) => { ctx.moveTo(hx + sd * u * 2.6, hy - u * (2.6 + flap)); ctx.lineTo(hx + sd * u * tx, hy + u * ty); });
-      ctx.moveTo(sx, sy); ctx.lineTo(hx + sd * u * 2.6, hy - u * (2.6 + flap));
-      ctx.stroke();
+      tips.forEach(([tx, ty]) => { ctx.moveTo(top[0], top[1]); ctx.lineTo(hx + sd * u * tx, hy + u * ty); });
+      ctx.moveTo(sx, sy); ctx.lineTo(top[0], top[1]); ctx.stroke();
     }
-    // 身体：肩膀与胸口隐在暗处
-    const g = ctx.createRadialGradient(hx, hy + u * 1.4, u * 0.3, hx, hy + u * 1.4, u * 2.6);
-    g.addColorStop(0, '#1c2417'); g.addColorStop(1, '#080a07');
+    // 肥厚的身体
+    const g = ctx.createRadialGradient(hx, hy + u * 1.1, u * 0.3, hx, hy + u * 1.3, u * 2.8);
+    g.addColorStop(0, '#1d2f2a'); g.addColorStop(1, '#050d0c');
     ctx.fillStyle = g;
-    ctx.beginPath(); ctx.ellipse(hx, hy + u * 1.7, u * 2.5, u * 1.5, 0, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(hx, hy + u * 1.4, u * 2.7, u * 1.7, 0, 0, TAU); ctx.fill();
+    // 身后的粗触手：左右各四条，盘卷着伸出屏幕
+    M.backPaths = [];
+    for (const sd of [-1, 1]) for (let k = 0; k < 4; k++) {
+      const a = [hx + sd * u * (0.9 + k * 0.2), hy + u * (0.1 + k * 0.4)];
+      const endX = sd > 0 ? W + u * (1.2 + k * 0.4) : -u * (1.2 + k * 0.4);
+      const endY = hy + u * (-2.6 + k * 1.25);
+      const lift = [-3.4, 1.6, -1.2, 2.6][k];
+      const c = [hx + sd * u * (2.2 + k * 0.7), hy + u * lift];
+      const P = waveBezier(a, c, [endX, endY], 30, time, 0.55, k * 1.7 + sd, u).map(([x, y], i) => {
+        const t = i / 30; return [x, y + Math.sin(t * Math.PI * 2 + k) * u * 0.5 * Math.sin(t * Math.PI)];
+      });
+      M.backPaths.push(P);
+      G.drawTentacle(ctx, P, u * (0.52 - k * 0.04), u * (0.2 - k * 0.02), PAL_FACE, { seed: k * 3 + sd });
+    }
   };
 
   // —— 头、七只眼、面部触手、手臂 ——
   function faceTentaclePts(i, time) {
     const { hx, hy, u } = M;
     const k = (i - 4) / 4;                       // -1..1
-    const bx = hx + k * u * 1.15, by = hy + u * (0.7 + (1 - Math.abs(k)) * 0.25);
-    const len = u * (1.6 + (1 - Math.abs(k)) * 1.1 + ((i * 37) % 5) * 0.08);
-    const spread = k * u * 0.9;
+    const bx = hx + k * u * 1.2, by = hy + u * (0.65 + (1 - Math.abs(k)) * 0.3);
+    const len = u * (2.0 + (1 - Math.abs(k)) * 1.4 + ((i * 37) % 5) * 0.1);
+    const spread = k * u * 1.3;
     const pts = [];
-    for (let j = 0; j <= 10; j++) {
-      const t = j / 10;
-      const sway = Math.sin(time * 1.2 + i * 1.9 + t * 3.2) * u * 0.28 * t;
-      const curl = t > 0.75 ? Math.sin((t - 0.75) * 9 + i) * u * 0.25 : 0;
-      pts.push([bx + spread * t + sway + curl, by + len * t + Math.cos(time * 0.9 + i + t * 2) * u * 0.06]);
+    for (let j = 0; j <= 12; j++) {
+      const t = j / 12;
+      const sway = Math.sin(time * 1.1 + i * 1.9 + t * 3.2) * u * 0.3 * t;
+      const curl = t > 0.7 ? Math.sin((t - 0.7) * 10 + i) * u * 0.35 * (t - 0.7) * 3 : 0;
+      pts.push([bx + spread * t * t + sway + curl, by + len * t + Math.cos(time * 0.9 + i + t * 2) * u * 0.06]);
     }
     return pts;
   }
-  function armPts(sd, time, reachTo) {
+  // 两条最粗的手臂：沿着祭台两侧爬出屏幕
+  function armPts(sd, time, W, H) {
     const { hx, hy, u } = M;
-    const a = [hx + sd * u * 1.9, hy + u * 1.0];
-    const tip = reachTo || G.proj(sd * 3.95, 0.25, 7.0);
-    const c = [(a[0] + tip[0]) / 2 + sd * u * (0.6 + Math.sin(time * 0.7 + sd) * 0.25), Math.min(a[1], tip[1]) - u * 0.5 + Math.cos(time * 0.9 + sd) * u * 0.2];
-    return G.bezier(a, c, [tip[0] + Math.sin(time * 1.3 + sd) * u * 0.15, tip[1]], 18);
+    const a = [hx + sd * u * 1.6, hy + u * 1.0];
+    const mid = G.proj(sd * 5.2, 0.4, 5.5);
+    const end = [sd > 0 ? W + u * 1.0 : -u * 1.0, G.proj(0, 0, 1.2)[1] + Math.sin(time * 0.5 + sd) * u * 0.2];
+    const P1 = waveBezier(a, [a[0] + sd * u * 1.2, a[1] + u * 0.3], mid, 12, time, 0.2, sd, u);
+    const P2 = waveBezier(mid, [mid[0] + sd * u * 0.4, (mid[1] + end[1]) / 2 + u * 0.6], end, 14, time, 0.15, sd * 2, u);
+    return P1.concat(P2.slice(1));
   }
 
-  M.drawFront = function (ctx, time, dt) {
+  M.drawFront = function (ctx, time, dt, W, H) {
     const { hx, hy, u } = M;
     const san = S.san / 100;
-    // 手臂（垂到盘边）
-    M.armPaths = [];
-    [-1, 1].forEach((sd, k) => {
-      const sq = squash(M.armSq[k].t); M.armSq[k].t += dt;
-      const P = armPts(sd, time);
-      M.armPaths.push(P);
-      G.drawTentacle(ctx, P, u * 0.42, u * 0.12, PAL_FACE, { sq });
-    });
-    // 头：外套膜 + 面部
+    // 头：大而圆的外套膜，裂纹石质，长着水草
     const bob = Math.sin(time * 0.6) * u * 0.05;
-    const g = ctx.createRadialGradient(hx - u * 0.6, hy - u * 1.4 + bob, u * 0.2, hx, hy - u * 0.5 + bob, u * 2.3);
-    g.addColorStop(0, '#3c4833'); g.addColorStop(0.45, '#1e271a'); g.addColorStop(1, '#070906');
-    ctx.fillStyle = '#060705';
-    ctx.beginPath(); ctx.ellipse(hx, hy - u * 1.0 + bob, u * 1.62, u * 1.5, 0, 0, TAU); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(hx, hy + u * 0.15 + bob, u * 1.55, u * 1.0, 0, 0, TAU); ctx.fill();
+    const g = ctx.createRadialGradient(hx - u * 0.7, hy - u * 1.8 + bob, u * 0.2, hx, hy - u * 0.6 + bob, u * 2.4);
+    g.addColorStop(0, '#6a8278'); g.addColorStop(0.35, '#3b5049'); g.addColorStop(0.75, '#1a2a26'); g.addColorStop(1, '#07100e');
+    ctx.fillStyle = '#030807';
+    ctx.beginPath(); ctx.ellipse(hx, hy - u * 1.05 + bob, u * 1.9, u * 1.72, 0, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(hx, hy + u * 0.2 + bob, u * 1.72, u * 1.12, 0, 0, TAU); ctx.fill();
     ctx.fillStyle = g;
-    ctx.beginPath(); ctx.ellipse(hx, hy - u * 1.0 + bob, u * 1.55, u * 1.43, 0, 0, TAU); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(hx, hy + u * 0.15 + bob, u * 1.48, u * 0.94, 0, 0, TAU); ctx.fill();
-    // 皮肤疙瘩
+    ctx.beginPath(); ctx.ellipse(hx, hy - u * 1.05 + bob, u * 1.83, u * 1.65, 0, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(hx, hy + u * 0.2 + bob, u * 1.65, u * 1.05, 0, 0, TAU); ctx.fill();
+    // 腮边的鳍状耳
+    for (const sd of [-1, 1]) {
+      ctx.fillStyle = '#16241f';
+      ctx.beginPath(); ctx.moveTo(hx + sd * u * 1.45, hy - u * 0.6 + bob); ctx.lineTo(hx + sd * u * 2.25, hy - u * 1.0 + bob); ctx.lineTo(hx + sd * u * 1.95, hy - u * 0.15 + bob); ctx.lineTo(hx + sd * u * 1.5, hy + u * 0.1 + bob); ctx.fill();
+    }
+    // 裂纹
     const r = G.mulberry(4242);
-    for (let k = 0; k < 40; k++) {
-      const a = r() * TAU, d = Math.sqrt(r());
-      const x = hx + Math.cos(a) * d * u * 1.4, y = hy - u * 0.7 + Math.sin(a) * d * u * 1.3 + bob;
-      ctx.fillStyle = r() < 0.5 ? 'rgba(10,14,8,0.55)' : 'rgba(120,140,100,0.25)';
-      ctx.fillRect(Math.round(x), Math.round(y), 1 + Math.round(r() * u * 0.08), 1);
+    ctx.strokeStyle = 'rgba(4,10,9,0.85)'; ctx.lineWidth = 1;
+    for (let k = 0; k < 6; k++) {
+      const a0 = -Math.PI * (0.15 + (k / 5) * 0.7);
+      let x = hx + Math.cos(a0) * u * 1.6, y = hy - u * 1.05 + Math.sin(a0) * u * 1.45 + bob;
+      ctx.beginPath(); ctx.moveTo(x, y);
+      for (let j = 0; j < 4; j++) { x += (hx - x) * 0.18 + (r() - 0.5) * u * 0.3; y += u * (0.12 + r() * 0.15); ctx.lineTo(x, y); }
+      ctx.stroke();
     }
-    // 斑驳的暗块与眉骨阴影
-    const r2 = G.mulberry(919);
-    for (let k = 0; k < 14; k++) {
-      const a = r2() * TAU, d = Math.sqrt(r2()) * 1.25;
-      ctx.fillStyle = `rgba(3,5,2,${0.18 + r2() * 0.25})`;
-      ctx.beginPath(); ctx.ellipse(hx + Math.cos(a) * d * u, hy - u * 0.9 + Math.sin(a) * d * u + bob, u * (0.15 + r2() * 0.3), u * (0.1 + r2() * 0.2), r2() * 3, 0, TAU); ctx.fill();
+    // 斑驳与水草
+    for (let k = 0; k < 18; k++) {
+      const a = r() * TAU, d = Math.sqrt(r()) * 1.4;
+      ctx.fillStyle = `rgba(3,8,7,${0.15 + r() * 0.25})`;
+      ctx.beginPath(); ctx.ellipse(hx + Math.cos(a) * d * u, hy - u * 1.0 + Math.sin(a) * d * u + bob, u * (0.15 + r() * 0.3), u * (0.1 + r() * 0.2), r() * 3, 0, TAU); ctx.fill();
     }
-    const brow = ctx.createLinearGradient(0, hy - u * 1.6 + bob, 0, hy - u * 0.4 + bob);
-    brow.addColorStop(0, 'rgba(0,0,0,0)'); brow.addColorStop(0.55, 'rgba(0,0,0,0.45)'); brow.addColorStop(1, 'rgba(0,0,0,0.1)');
-    ctx.fillStyle = brow; ctx.beginPath(); ctx.ellipse(hx, hy - u * 0.75 + bob, u * 1.5, u * 0.85, 0, 0, TAU); ctx.fill();
-    ctx.strokeStyle = 'rgba(70,20,30,0.45)'; ctx.lineWidth = 1;
-    for (let k = 0; k < 5; k++) { const a = -2.6 + k * 0.5; ctx.beginPath(); ctx.moveTo(hx + Math.cos(a) * u * 1.4, hy - u * 0.9 + Math.sin(a) * u * 1.3 + bob); ctx.quadraticCurveTo(hx + Math.cos(a) * u * 0.9, hy - u * 0.6 + bob, hx + Math.cos(a + 0.3) * u * 0.5, hy - u * 0.3 + bob); ctx.stroke(); }
-    // 湿光
-    ctx.fillStyle = 'rgba(150,170,130,0.22)';
-    ctx.beginPath(); ctx.ellipse(hx - u * 0.75, hy - u * 1.85 + bob, u * 0.32, u * 0.12, -0.5, 0, TAU); ctx.fill();
-    // 面部触手（盖住下巴，垂到桌上）
+    for (let k = 0; k < 60; k++) {
+      const a = -Math.PI * (0.15 + r() * 0.7), d = 0.6 + r() * 0.45;
+      const x = hx + Math.cos(a) * d * u * 1.8, y = hy - u * 1.05 + Math.sin(a) * d * u * 1.6 + bob;
+      ctx.fillStyle = r() < 0.5 ? '#3d6a32' : '#2a4c26';
+      ctx.fillRect(Math.round(x), Math.round(y), 1 + Math.round(r() * 2), 1 + Math.round(r() * 2));
+    }
+    // 眉骨阴影
+    const brow = ctx.createLinearGradient(0, hy - u * 1.7 + bob, 0, hy - u * 0.4 + bob);
+    brow.addColorStop(0, 'rgba(0,0,0,0)'); brow.addColorStop(0.55, 'rgba(0,0,0,0.5)'); brow.addColorStop(1, 'rgba(0,0,0,0.15)');
+    ctx.fillStyle = brow; ctx.beginPath(); ctx.ellipse(hx, hy - u * 0.75 + bob, u * 1.6, u * 0.9, 0, 0, TAU); ctx.fill();
+    // 顶部被水面光照到的湿光
+    ctx.fillStyle = 'rgba(160,230,210,0.18)';
+    ctx.beginPath(); ctx.ellipse(hx - u * 0.6, hy - u * 2.2 + bob, u * 0.55, u * 0.18, -0.4, 0, TAU); ctx.fill();
+    // 面部触手（盖住下巴，垂到祭台上）
     M.facePaths = [];
     const order = [0, 8, 1, 7, 2, 6, 3, 5, 4];
     for (const i of order) {
       const sq = squash(M.faceSq[i].t); M.faceSq[i].t += dt;
       const P = faceTentaclePts(i, time);
       M.facePaths[i] = P;
-      G.drawTentacle(ctx, P, u * 0.24, u * 0.05, PAL_FACE, { sq });
+      G.drawTentacle(ctx, P, u * 0.3, u * 0.07, PAL_FACE, { sq, seed: i });
     }
+    // 手臂
+    M.armPaths = [];
+    [-1, 1].forEach((sd, k) => {
+      const sq = squash(M.armSq[k].t); M.armSq[k].t += dt;
+      const P = armPts(sd, time, W, H);
+      M.armPaths.push(P);
+      G.drawTentacle(ctx, P, u * 0.55, u * 0.42, PAL_FACE, { sq, seed: 9 + k });
+    });
     // 七只眼
     M.eyeSquint.t += dt;
     const squint = M.eyeSquint.t < 0.9 ? Math.sin(Math.min(1, M.eyeSquint.t / 0.9) * Math.PI) * 0.7 : 0;
@@ -316,9 +338,9 @@
   M.pokeBody = function (x, y) {
     if (M.facePaths) for (let i = 0; i < 9; i++) {
       const P = M.facePaths[i]; if (!P) continue;
-      if (G.distToPolyline(x, y, P).d < M.u * 0.25 + 3) { M.faceSq[i].t = 0; M.eyeSquint.t = 0; return true; }
+      if (G.distToPolyline(x, y, P).d < M.u * 0.28 + 3) { M.faceSq[i].t = 0; M.eyeSquint.t = 0; return true; }
     }
-    if (M.armPaths) for (let k = 0; k < 2; k++) if (G.distToPolyline(x, y, M.armPaths[k]).d < M.u * 0.3 + 3) { M.armSq[k].t = 0; return true; }
+    if (M.armPaths) for (let k = 0; k < 2; k++) if (G.distToPolyline(x, y, M.armPaths[k]).d < M.u * 0.5 + 3) { M.armSq[k].t = 0; return true; }
     const dx = (x - M.hx) / (M.u * 1.6), dy = (y - M.hy + M.u * 0.5) / (M.u * 1.6);
     if (dx * dx + dy * dy < 1) { M.eyeSquint.t = 0; return true; }
     return false;
@@ -333,14 +355,14 @@
     else {
       const zc = 2.4 + Math.random() * 2.2;
       const rest = [];
-      for (let i = 0; i < 16; i++) { const t = i / 15; rest.push([-5.4 + t * 9.9, zc + Math.sin(t * 3.1 + zc) * 0.45 - t * 0.3]); }
+      for (let i = 0; i < 16; i++) { const t = i / 15; rest.push([-6.0 + t * 11.0, zc + Math.sin(t * 4.2 + zc) * 0.6 - t * 0.4]); }
       S.event = { kind: 'press', phase: 'slam', t: 0, rest, off: rest.map(() => [0, 0]), pokes: 0, sq: 9, drag: null };
     }
     G.say(steal ? '它伸手了……' : '一条触手压了下来', 1.6);
   };
 
-  function evOrigin(sd) { return [M.hx + sd * M.u * 1.9, M.hy + M.u * 1.0]; }
-  const PRESS_H = 1.02;
+  function evOrigin(sd) { return [M.hx + sd * M.u * 1.3, M.hy + M.u * 0.9]; }
+  const PRESS_H = 1.75;
 
   function stealPath(ev) {
     const base = evOrigin(1);
@@ -352,7 +374,7 @@
       tip = [sx / tg.length, sy / tg.length];
     } else tip = G.proj(G.slotX(3), 0.2, G.SLOT_Z);
     ev.tip = tip;
-    const c = [(base[0] + tip[0]) / 2 + M.u * 2.2, Math.min(base[1], tip[1]) - M.u * 1.2];
+    const c = [(base[0] + tip[0]) / 2 + M.u * 1.6, Math.min(base[1], tip[1]) - M.u * 0.8];
     let upto = 0;
     if (ev.phase === 'reach') upto = ev.t / ev.dur;
     else if (ev.phase === 'grab' || ev.phase === 'hurt') upto = ev.reachAt || 1;
@@ -407,7 +429,7 @@
       if (ev.phase === 'slam') {
         const k = Math.min(1, ev.t / 0.55);
         const b = k < 0.7 ? Math.pow(k / 0.7, 2) : 1 - Math.sin(((k - 0.7) / 0.3) * Math.PI) * 0.12;
-        ev.h = G.lerp(4.2, PRESS_H, b);
+        ev.h = G.lerp(5.2, PRESS_H, b);
         if (k >= 1) { ev.phase = 'hold'; ev.h = PRESS_H; }
       } else if (ev.phase === 'spring') {
         const e = Math.exp(-5 * ev.t) * Math.cos(14 * ev.t);
@@ -427,7 +449,7 @@
     const ev = S.event; if (!ev || S.state !== 'play') return false;
     const P = ev.path; if (!P) return false;
     const hit = G.distToPolyline(x, y, P);
-    const tol = (ev.kind === 'press' ? M.ub * 0.5 : M.u * 0.35) + 5;
+    const tol = (ev.kind === 'press' ? M.ub * 0.55 : M.ub * 0.5) + 5;
     if (hit.d > tol) return false;
     if (ev.kind === 'steal') {
       if (ev.phase === 'reach') {
@@ -478,16 +500,15 @@
   // —— 画捣乱触手 ——
   G.drawEvent = function (ctx) {
     const ev = S.event; if (!ev) { return; }
-    M.ub = G.proj(0, PRESS_H, 3.5)[2];
     const sq = squash(ev.sq);
     if (ev.kind === 'steal') {
       const P = stealPath(ev);
       ev.path = P;
-      G.drawTentacle(ctx, P, M.u * 0.42, M.u * 0.14, PAL_EVENT, { sq });
+      G.drawTentacle(ctx, P, M.ub * 0.7, M.ub * 0.22, PAL_EVENT, { sq });
       if (ev.carried && ev.phase === 'retreat') {
         const tip = P[P.length - 1];
         ev.carried.forEach((it, k) => {
-          const s = M.u * 0.7;
+          const s = M.ub * 1.1;
           ctx.drawImage(G.SPRITES[it.type], Math.round(tip[0] - s / 2 + k * s * 0.5), Math.round(tip[1] - s / 2 - k * 3), Math.round(s), Math.round(s));
         });
       }
@@ -500,7 +521,7 @@
       if (ev.phase !== 'slam' || ev.t > 0.3) {
         ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineCap = 'round'; ctx.lineWidth = M.ub * 0.9;
         ctx.beginPath();
-        ev.rest.forEach(([x, z], i) => { const p = G.proj(x + ev.off[i][0] + 0.15, G.tileTopH(2), z + ev.off[i][1] - 0.2); i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); });
+        ev.rest.forEach(([x, z], i) => { const p = G.proj(x + ev.off[i][0] + 0.15, G.FLOOR_H, z + ev.off[i][1] - 0.2); i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); });
         ctx.stroke();
       }
       const n = P.length;

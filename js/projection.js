@@ -2,7 +2,7 @@
 // 世界坐标：x 向右，y 向上（桌面 y=0），z 向远处。
 (function () {
   const G = window.G;
-  const cam = (G.cam = { pitch: 0.9, ch: 9.6, cz: -6.4, f: 100, cx: 0, cy: 0, sp: 0, cp: 0 });
+  const cam = (G.cam = { pitch: 1.0, ch: 9.6, cz: -6.4, f: 100, cx: 0, cy: 0, sp: 0, cp: 0 });
 
   G.proj = function (x, y, z) {
     const Y = y - cam.ch, Z = z - cam.cz;
@@ -27,13 +27,13 @@
     cam.cx = W / 2; cam.cy = 0; cam.f = 100;
     // 宽度：近边槽位轨占列宽的 94%
     const colW = Math.min(W, H * 0.78);
-    let a = G.proj(-4.1, 0, -1.5), b = G.proj(4.1, 0, -1.5);
+    let a = G.proj(-4.4, 0, -2.3), b = G.proj(4.4, 0, -2.3);
     cam.f *= (colW * 0.94) / (b[0] - a[0]);
     // 高度：近边到克苏鲁头顶
-    let top = G.proj(0, 6.3, 10.5)[1], bot = G.proj(0, 0, -1.55)[1];
+    let top = G.proj(0, 7.0, 10.6)[1], bot = G.proj(0, 0, -2.35)[1];
     const span = bot - top, avail = H * 0.985;
     if (span > avail) cam.f *= avail / span;
-    top = G.proj(0, 6.3, 10.5)[1]; bot = G.proj(0, 0, -1.55)[1];
+    top = G.proj(0, 7.0, 10.6)[1]; bot = G.proj(0, 0, -2.35)[1];
     cam.cy = H - 3 - bot;
   };
 })();

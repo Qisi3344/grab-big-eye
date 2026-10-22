@@ -66,6 +66,7 @@
       let n = 0;
       for (const it of S.slot) if (!it.dying && it.type == k && n < 3) { it.dying = 0.0001; n++; }
       S.san = Math.min(100, S.san + 4);
+      if (G.setMood && Math.random() < 0.5) G.setMood('angry', 1.4);   // 你凑成三个，它不高兴
       S.history = [];
       return true;
     }

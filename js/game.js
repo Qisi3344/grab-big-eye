@@ -27,6 +27,9 @@
   G.LEVELS = [
     { id: 1, name: '第一夜 · 七眼祭盘', desc: '63 件供品，三层，一只盯着你的眼', ready: true },
     { id: 2, name: '第二夜 · ？？？', desc: '封印未解', ready: false },
+    { id: 3, name: '第三夜 · ？？？', desc: '封印未解', ready: false },
+    { id: 4, name: '第四夜 · ？？？', desc: '封印未解', ready: false },
+    { id: 5, name: '第五夜 · ？？？', desc: '封印未解', ready: false },
   ];
   G.level = 1;
   G.newGame = function () {

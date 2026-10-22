@@ -10,10 +10,12 @@
   const PAL_BACK = { out: '#020605', dark: '#0a1412', body: '#1c2b27', light: '#557067', sucker: '#55302c', moss: '#355f2b' };
   const PAL_EVENT = { out: '#030807', dark: '#11221d', body: '#2b4438', light: '#6f9480', sucker: '#82322a', moss: '#4a7e3a' };
 
+  // 表情：angry 恼怒 / smug 得意 / hurt 吃痛；stare（盯着你）由槽位快满时自动出现
+  G.setMood = function (kind, dur) { if (M.mood) { M.mood.kind = kind; M.mood.t = 0; M.mood.dur = dur || 1.8; } };
   G.monsterReset = function () {
     M.faceSq = Array(9).fill(0).map(() => ({ t: 9 }));
     M.armSq = [{ t: 9 }, { t: 9 }];
-    M.eyeBlink = 0; M.eyeSquint = { t: 9 };
+    M.eyeBlink = 0; M.eyeSquint = { t: 9 }; M.mood = { kind: '', t: 9, dur: 0 };
     M.drips = []; M.dripT = 0;
     const r = G.mulberry(777);
     M.wallEyes = [];
@@ -469,7 +471,7 @@
   M.pokeBody = function (x, y) {
     if (M.facePaths) for (let i = 0; i < 6; i++) {
       const P = M.facePaths[i]; if (!P) continue;
-      if (G.distToPolyline(x, y, P).d < M.u * 0.28 + 3) { M.faceSq[i].t = 0; M.eyeSquint.t = 0; return true; }
+      if (G.distToPolyline(x, y, P).d < M.u * 0.28 + 3) { M.faceSq[i].t = 0; M.eyeSquint.t = 0; G.setMood('angry', 1.2); return true; }
     }
     if (M.armPaths) for (let k = 0; k < 2; k++) if (G.distToPolyline(x, y, M.armPaths[k]).d < M.u * 0.5 + 3) { M.armSq[k].t = 0; return true; }
     const dx = (x - M.hx) / (M.u * 1.6), dy = (y - M.hy + M.u * 0.5) / (M.u * 1.6);
@@ -553,7 +555,7 @@
         const live = G.liveSlot();
         let tg = (ev.targets || []).filter(it => live.includes(it));
         if (!tg.length) tg = G.stealTargets();
-        if (tg.length) { G.removeFromSlot(tg); ev.carried = tg; G.say(tg.length === 2 ? '它卷走了你凑好的一对，塞回了盘底' : '它卷走了一件供品', 2.2); }
+        if (tg.length) { G.removeFromSlot(tg); ev.carried = tg; G.say(tg.length === 2 ? '它卷走了你凑好的一对，塞回了盘底' : '它卷走了一件供品', 2.2); G.setMood('smug', 2.6); }
         ev.phase = 'retreat'; ev.t = 0;
       } else if (ev.phase === 'hurt' && ev.t >= 0.35) { ev.phase = 'retreat'; ev.t = 0; }
       else if (ev.phase === 'retreat' && ev.t >= 0.9) {
@@ -589,7 +591,7 @@
     if (ev.kind === 'steal') {
       if (ev.phase === 'reach') {
         ev.reachAt = ev.t / ev.dur; ev.phase = 'hurt'; ev.t = 0; ev.sq = 0;
-        G.say('它吃痛缩回去了', 1.4);
+        G.say('它吃痛缩回去了', 1.4); G.setMood('angry', 2.2);
       }
       return true;
     }
@@ -617,15 +619,15 @@
     const d = ev.drag; ev.drag = null;
     if (!d.moved) {
       ev.pokes++; ev.sq = 0;
-      if (ev.pokes >= 4) { ev.phase = 'retreat'; ev.t = 0; ev.vel = [-7, 3]; G.say('戳跑了！', 1.4); }
-      else G.say(['它抖了一下', '再戳戳', '快不行了'][ev.pokes - 1], 1.1);
+      if (ev.pokes >= 4) { ev.phase = 'retreat'; ev.t = 0; ev.vel = [-7, 3]; G.say('戳跑了！', 1.4); G.setMood('angry', 2.2); }
+      else { G.say(['它抖了一下', '再戳戳', '快不行了'][ev.pokes - 1], 1.1); G.setMood('hurt', 0.6); }
       return;
     }
     const L = d.dv ? Math.hypot(d.dv[0], d.dv[1]) : 0;
     if (L > 2.3) {
       ev.phase = 'slide'; ev.t = 0;
       ev.vel = [d.dv[0] / L * 9, d.dv[1] / L * 9];
-      G.say('甩开了！它滑下了桌子', 1.6);
+      G.say('甩开了！它滑下了桌子', 1.6); G.setMood('angry', 2.4);
     } else {
       ev.phase = 'spring'; ev.t = 0; ev.off0 = ev.off.map(o => o.slice()); ev.lift0 = (ev.lift || ev.off.map(() => 0)).slice();
       G.say('再狠点，拖远点！', 1.4);

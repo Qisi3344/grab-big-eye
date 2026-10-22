@@ -78,3 +78,55 @@ button b { font-weight: 400; color: #e6c79a; margin-left: 2px; }
 #end.lose h1 { color: var(--blood-hi); }
 #end p { color: var(--bone-dim); font-size: 15px; line-height: 1.8; margin-bottom: 20px; }
 #end button { width: 160px; flex: none; }
+
+/* —— 开始界面 / 关卡选择 —— */
+#title, #levels {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity .7s;
+}
+#title.show, #levels.show { opacity: 1; pointer-events: auto; }
+.veil { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 38%, rgba(0,0,0,0) 0, rgba(0,0,0,.45) 38%, rgba(0,0,0,.92) 75%); }
+#title .veil { background: linear-gradient(rgba(0,0,0,0) 0, rgba(0,0,0,.15) 30%, rgba(0,0,0,.9) 52%, #000 70%); }
+body.inmenu #hud, body.inmenu #btnMenu, body.inmenu #bar { opacity: 0; pointer-events: none; }
+#hud, #btnMenu, #bar { transition: opacity .6s; }
+.titlebox { position: relative; text-align: center; margin-top: 38vh; padding: 0 20px; }
+.kicker { font-size: 12px; letter-spacing: .5em; color: #6f7d72; margin-bottom: 6px; }
+.logo {
+  font-weight: 400; font-size: clamp(46px, 13vw, 76px); letter-spacing: .18em; line-height: 1.1;
+  color: #d9d0b5; text-shadow: 0 0 18px rgba(60,255,140,.28), 0 0 2px #000, 3px 3px 0 #2a0605;
+  animation: breathe 5s ease-in-out infinite;
+}
+.sub { font-size: 14px; letter-spacing: .6em; color: #8a8270; margin: 4px 0 26px; }
+@keyframes breathe { 0%,100% { text-shadow: 0 0 14px rgba(60,255,140,.18), 3px 3px 0 #2a0605; } 50% { text-shadow: 0 0 26px rgba(60,255,140,.42), 3px 3px 0 #2a0605; } }
+.menu { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.menu button { width: 200px; flex: none; }
+.hint { margin-top: 18px; font-size: 12px; letter-spacing: .3em; color: #4f5d55; min-height: 1em; }
+button.ghost { background: rgba(10,14,12,.7); border: 1px solid #3a4a40; box-shadow: none; color: #a9b8a8; }
+button:disabled { opacity: .4; pointer-events: none; }
+.levelbox { position: relative; width: min(420px, 90vw); text-align: center; }
+.levelbox h2 { font-weight: 400; letter-spacing: .5em; font-size: 20px; color: #cfc6ab; margin-bottom: 18px; }
+#levelList { display: flex; flex-direction: column; gap: 12px; margin-bottom: 18px; }
+.lv {
+  position: relative; display: flex; align-items: center; gap: 14px; text-align: left; padding: 12px 14px;
+  background: linear-gradient(90deg, rgba(14,22,19,.92), rgba(8,10,9,.92)); border: 1px solid #2c3a33;
+  cursor: pointer; transition: border-color .2s, transform .2s;
+}
+.lv:hover { border-color: #4f7a62; transform: translateX(2px); }
+.lv .no { font-size: 30px; width: 44px; text-align: center; color: #5fd08e; text-shadow: 0 0 10px rgba(60,255,140,.4); }
+.lv h3 { font-weight: 400; font-size: 17px; letter-spacing: .15em; color: #d8cfb4; }
+.lv p { font-size: 12px; color: #7d8a80; letter-spacing: .08em; margin-top: 3px; line-height: 1.5; }
+.lv .badge { margin-left: auto; font-size: 12px; color: #c9a85a; letter-spacing: .1em; white-space: nowrap; }
+.lv.locked { cursor: default; filter: grayscale(1) brightness(.6); }
+.lv.locked:hover { transform: none; border-color: #2c3a33; }
+.lv.locked .no { color: #555; text-shadow: none; }
+.back { width: 140px; flex: none; }
+#btnMenu.icon {
+  position: absolute; top: max(8px, env(safe-area-inset-top)); right: 10px; width: 34px; height: 30px; flex: none;
+  padding: 0; font-size: 16px; letter-spacing: 0; background: rgba(8,10,9,.6); border: 1px solid #2c3a33; box-shadow: none; color: #9fb0a2;
+}
+#end .row { display: flex; gap: 10px; justify-content: center; }
+#end .row button { width: 130px; }
+/* 底栏和提示框稍微精致一点 */
+#bar { border-top: 1px solid #1f2b26; background: linear-gradient(#0a0e0c, #030404); }
+#toast { border-color: #2c3a33; background: rgba(6,10,8,.9); box-shadow: 0 0 12px rgba(60,255,140,.08); }
+#end .card { border-color: #2c3a33; background: linear-gradient(#0c1210, #060807); box-shadow: 0 0 40px rgba(0,0,0,.8); }

@@ -221,7 +221,7 @@
 
   // —— 外部模型（Tripo 生成的半身克苏鲁，assets/cthulhu.glb）——
   // 自己解析 GLB（单网格 + 一张底色贴图），省掉 GLTFLoader
-  const MS = 17, MODEL_HEAD = [0, 0.44, 0.3], MODEL_EYE = [0.028, 0.384, 0.45], ANCHOR = [0.03, 0.40, 0.425];
+  const MS = 17, MODEL_HEAD = [0, 0.44, 0.3], MODEL_EYE = [0.03, 0.368, 0.452], ANCHOR = [0.03, 0.40, 0.425];
   function mpos(x, y, z) { return new T.Vector3(x * MS + P.model.position.x, y * MS + P.model.position.y, z * MS + P.model.position.z); }
   async function loadModel() {
     if (typeof fetch === 'undefined' || /[?&]proc\b/.test(location.search)) return;
@@ -267,8 +267,11 @@
           float ax = abs(position.x), sx = position.x < 0.0 ? -1.0 : 1.0;
           // 模型的头顶偏扁：把眼睛以上的颅顶往上拉高，像参考图那样的大圆颅
           float hw = (1.0 - smoothstep(0.05, 0.095, ax)) * smoothstep(0.17, 0.26, position.z) * smoothstep(0.385, 0.40, position.y);
-          transformed.y += hw * (position.y - 0.39) * 1.3;
-          transformed.z -= hw * (position.y - 0.39) * 0.6;
+          transformed.y += hw * (position.y - 0.39) * 0.7;
+          transformed.z -= hw * (position.y - 0.39) * 0.35;
+          // 头颅加宽：眼睛以上整块往两边撑开，边缘渐弱保证连续
+          float hx = (1.0 - smoothstep(0.10, 0.15, ax)) * smoothstep(0.17, 0.26, position.z) * smoothstep(0.355, 0.385, position.y);
+          transformed.x *= 1.0 + hx * 0.45;
           // 蝠翼：绕肩慢慢开合
           float ww = smoothstep(0.08, 0.22, ax) * smoothstep(0.24, 0.36, position.y) * (1.0 - smoothstep(0.12, 0.3, position.z));
           float ang = ww * (sin(uTime * 0.8) * 0.10 + 0.02) * sx;

@@ -260,8 +260,8 @@
       const tex = new T.Texture(bmp); tex.flipY = false; tex.needsUpdate = true;
       const mat = toon({ map: tex, color: '#a9c4b8' });
       mat.onBeforeCompile = sh => {
-        sh.uniforms.uTime = P.uTime; sh.uniforms.uPoke = P.uPoke;
-        sh.vertexShader = 'uniform float uTime; uniform float uPoke;\n' + sh.vertexShader.replace('#include <begin_vertex>', `
+        sh.uniforms.uTime = P.uTime; sh.uniforms.uPoke = P.uPoke; sh.uniforms.uArm = P.uArm;
+        sh.vertexShader = 'uniform float uTime; uniform float uPoke; uniform vec2 uArm;\n' + sh.vertexShader.replace('#include <begin_vertex>', `
           vec3 transformed = vec3(position);
           float ax = abs(position.x), sx = position.x < 0.0 ? -1.0 : 1.0;
           // 头部保持 Tripo 原模型的形状，不做变形
@@ -275,9 +275,15 @@
           float bw = (1.0 - smoothstep(0.34, 0.38, position.y)) * smoothstep(0.24, 0.32, position.z) * (1.0 - smoothstep(0.1, 0.16, ax));
           float dep = clamp((0.37 - position.y) / 0.22, 0.0, 1.0);
           transformed.x += bw * dep * (sin(uTime * 1.3 + position.y * 40.0 + position.x * 30.0) * 0.007 + uPoke * sin(uTime * 15.0 + position.y * 60.0) * 0.012);
-          transformed.z += bw * dep * cos(uTime * 1.1 + position.y * 30.0 + position.x * 20.0) * 0.006;`);
+          transformed.z += bw * dep * cos(uTime * 1.1 + position.y * 30.0 + position.x * 20.0) * 0.006;
+          // 模型自带的两侧触手：慢慢游动，越往外摆得越大；戳中哪边哪边乱颤
+          float sw = smoothstep(0.12, 0.2, ax) * (1.0 - smoothstep(0.30, 0.36, position.y)) * smoothstep(0.2, 0.3, position.z);
+          float rr = clamp((ax - 0.12) / 0.3, 0.0, 1.0);
+          float pk = sx < 0.0 ? uArm.x : uArm.y;
+          transformed.y += sw * rr * (sin(uTime * 0.7 + ax * 18.0 + sx) * 0.012 + pk * sin(uTime * 14.0 + ax * 50.0) * 0.012);
+          transformed.z += sw * rr * cos(uTime * 0.6 + ax * 14.0) * 0.008;`);
       };
-      P.uTime = { value: 0 }; P.uPoke = { value: 0 };
+      P.uTime = { value: 0 }; P.uPoke = { value: 0 }; P.uArm = { value: new T.Vector2() };
       // 编号通道里模型改写深度（r/g 两字节，b=255 作记号），描边时按深度跳变找出触手之间的轮廓
       const dmat = new T.MeshBasicMaterial();
       dmat.onBeforeCompile = sh => {
@@ -301,6 +307,8 @@
       const tripoHead = !/[?&]prochead\b/.test(location.search);
       for (const o of P.proc) o.visible = !tripoHead;
       for (const t of P.procTents) t.mesh.visible = false;
+      // 两侧程序做的大手臂和模型画风对不上，有模型时藏起来，用模型自带的触手（她 2026-10-22）
+      for (const t of P.arms) t.mesh.visible = false;
       if (tripoHead) for (const e of P.eyes) { e.base.copy(mpos(e.sd * MODEL_EYE[0], MODEL_EYE[1], MODEL_EYE[2])); e.es = 0.45; e.eye.rotation.z = e.sd * 0.35; }
       M3.fog = /nofog/.test(DBG) ? 0 : 0.3;
       if (/noeyes/.test(DBG)) for (const e of P.eyes) { e.eye.visible = false; e.core.visible = false; }
@@ -428,7 +436,16 @@
     }
     // 两条最粗的手臂：沿着祭台两侧爬出屏幕（世界坐标）
     M.armPaths = [];
-    [-1, 1].forEach((sd, k) => {
+    if (P.model) {
+      // 模型两侧触手的点击区域：沿着触手从脸侧往外的折线
+      [-1, 1].forEach((sd, k) => {
+        const sq = Math.max(0, 1.2 - M.armSq[k].t) / 1.2; M.armSq[k].t += dt;
+        P.uArm.value.setComponent(k, sq);
+        const pts = [];
+        for (let j = 0; j <= 6; j++) { const t = j / 6; const v = mpos(sd * (0.13 + t * 0.27), 0.3 - t * 0.12 - Math.sin(t * Math.PI) * 0.02, 0.4 - t * 0.08); pts.push(t2s(L(v.x, v.y, v.z))); }
+        M.armPaths.push(pts.map(p => [p[0], p[1]]));
+      });
+    } else [-1, 1].forEach((sd, k) => {
       const sq = squashOf(M.armSq[k], dt);
       const a = L(sd * 1.3, -1.1, 0.5);
       const mid = g2t(sd * 5.2, 0.45, 5.5);

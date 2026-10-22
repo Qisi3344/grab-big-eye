@@ -225,8 +225,14 @@
   function mpos(x, y, z) { return new T.Vector3(x * MS + P.model.position.x, y * MS + P.model.position.y, z * MS + P.model.position.z); }
   async function loadModel() {
     if (typeof fetch === 'undefined' || /[?&]proc\b/.test(location.search)) return;
+    // 载入期间先藏起手捏的头，免得闪一下旧脸
+    for (const o of P.proc) o.visible = false;
+    for (const t of P.procTents) t.mesh.visible = false;
+    M3.loading = true;
     try {
-      const buf = await (await fetch(window.GBE_MODEL_URL || 'assets/cthulhu.glb')).arrayBuffer();
+      const res = await fetch(window.GBE_MODEL_URL || 'assets/cthulhu.glb');
+      if (!res.ok) throw new Error('下载失败 ' + res.status);
+      const buf = await res.arrayBuffer();
       const dv = new DataView(buf);
       const jl = dv.getUint32(12, true);
       const json = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 20, jl)));
@@ -249,7 +255,9 @@
       geo.setAttribute('uv', new T.BufferAttribute(acc(pr.attributes.TEXCOORD_0), 2));
       geo.setIndex(new T.BufferAttribute(acc(pr.indices), 1));
       const im = json.images[0], [io, il] = view(im.bufferView);
-      const bmp = await createImageBitmap(new Blob([new Uint8Array(buf, io, il)], { type: im.mimeType }));
+      const blob = new Blob([new Uint8Array(buf, io, il)], { type: im.mimeType });
+      // 老 Safari 的 createImageBitmap 不稳，退回 <img> 解码
+      const bmp = await new Promise((res, rej) => { const img = new Image(), u = URL.createObjectURL(blob); img.onload = () => res(img); img.onerror = () => rej(new Error('贴图解码失败')); img.src = u; });
       const tex = new T.Texture(bmp); tex.flipY = false; tex.needsUpdate = true;
       const mat = toon({ map: tex, color: '#a9c4b8' });
       mat.onBeforeCompile = sh => {
@@ -294,7 +302,14 @@
       for (const e of P.eyes) { e.base.copy(mpos(e.sd * MODEL_EYE[0], MODEL_EYE[1], MODEL_EYE[2])); e.es = 0.45; e.eye.rotation.z = e.sd * 0.35; }
       M3.fog = 0.3;
       M3.model = true;
-    } catch (e) { console.warn('克苏鲁模型载入失败，用手捏版', e); }
+      M3.loading = false;
+    } catch (e) {
+      console.warn('克苏鲁模型载入失败，用手捏版', e);
+      M3.loading = false; M3.modelErr = String(e && e.message || e).slice(0, 60);
+      if (P.model) group.remove(P.model); P.model = null;
+      for (const o of P.proc) o.visible = true;
+      for (const t of P.procTents) t.mesh.visible = true;
+    }
   }
 
   // 局部坐标（u 单位，y 向上，z 朝镜头）→ three 世界坐标
@@ -485,6 +500,7 @@
     }
     tmpx.putImageData(img, 0, 0);
     ctx.drawImage(tmpc, 0, 0);
+    if (M3.modelErr) { ctx.save(); ctx.font = '10px monospace'; ctx.fillStyle = 'rgba(200,120,110,0.8)'; ctx.fillText('模型载入失败：' + M3.modelErr, 6, H - 6); ctx.restore(); }
 
     // 眼睛的辉光（2D 叠加）
     const hex = '#' + ic.getHexString();

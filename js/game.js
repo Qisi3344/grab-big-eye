@@ -1,4 +1,5 @@
-// 规则与状态：抓取、7 格槽、三消、撤销、洗牌、San、捣乱节奏、胜负。
+// 规则与状态：抓取、槽位、三消、撤销、洗牌、San、捣乱节奏、胜负。
+// 每一夜的槽位数 / 供品种类 / 捣乱配方来自 levels.js；夜的特殊机制挂在 rites.js 的钩子上。
 (function () {
   const G = window.G;
   const ROT = -0.035;               // 祭盘随手摆歪一点
@@ -19,33 +20,35 @@
   };
   G.boardRot = ROT;
   G.tileTopH = layer => G.BOARD_TOP + (layer + 1) * G.LAYER_H;
-  G.slotX = i => (i - 3) * 1.08;
+  G.slotX = i => (i - (G.SLOT_N - 1) / 2) * 1.08;
+  G.curLevel = () => G.LEVELS[G.level - 1] || G.LEVELS[0];
 
   const S = (G.S = {});
 
-  // 关卡表：第二关还在设计，先占位锁着
-  G.LEVELS = [
-    { id: 1, name: '第一夜 · 七眼祭盘', desc: '63 件供品，三层，一只盯着你的眼', ready: true },
-    { id: 2, name: '第二夜 · ？？？', desc: '封印未解', ready: false },
-    { id: 3, name: '第三夜 · ？？？', desc: '封印未解', ready: false },
-    { id: 4, name: '第四夜 · ？？？', desc: '封印未解', ready: false },
-    { id: 5, name: '第五夜 · ？？？', desc: '封印未解', ready: false },
-  ];
-  G.level = 1;
   G.newGame = function () {
+    const lv = G.curLevel();
+    G.SLOT_N = lv.slot || 7;
+    // 槽位轨变宽变窄时，让近景取景跟着走
+    G.RAIL_HW = Math.max(3.9, ((G.SLOT_N - 1) / 2) * 1.08 + 0.75);
+    if (G.fitCameraPending) { G.fitCameraPending = false; if (G.refitCamera) G.refitCamera(); }
     S.tiles = G.newBoard();
     S.slot = [];
     S.history = [];
-    S.shuffles = 3;
+    S.shuffles = lv.shuffles != null ? lv.shuffles : 3;
     S.san = 100;
     S.grabs = 0;
+    S.matches = 0;
     S.state = 'play';
     S.endAt = 0;
     S.time = 0;
-    S.nextEventAt = 12 + Math.floor(Math.random() * 3);
+    const ev = lv.event || { first: [12, 3], gap: [4, 3] };
+    S.nextEventAt = ev.first[0] + Math.floor(Math.random() * ev.first[1]);
     S.event = null;
     S.particles = [];
     S.msg = null;
+    G.MON_Z = 10.6;
+    G.SHAKE = 0;
+    if (G.riteInit) G.riteInit(lv);
     if (G.monsterReset) G.monsterReset();
   };
 
@@ -57,6 +60,7 @@
     if (S.state !== 'play' || !t.alive) return false;
     if (G.isCovered(t, S.tiles)) return false;
     if (G.pressBlocks && G.pressBlocks(t)) return false;
+    if (G.riteBlocks && G.riteBlocks(t)) return false;
     return true;
   };
 
@@ -75,6 +79,8 @@
       let n = 0;
       for (const it of S.slot) if (!it.dying && it.type == k && n < 3) { it.dying = 0.0001; n++; }
       S.san = Math.min(100, S.san + 4);
+      S.matches++;
+      if (G.onMatch) G.onMatch(+k);          // 献给夜的仪式（腐眼不祥、血月升高等）
       if (G.setMood && Math.random() < 0.5) G.setMood('angry', 1.4);   // 你凑成三个，它不高兴
       S.history = [];
       return true;
@@ -91,6 +97,7 @@
 
   G.grab = function (t) {
     if (!G.canGrab(t)) return false;
+    if (G.riteOnGrab && G.riteOnGrab(t)) return false;   // 仪式可以先咬你一口再放行/拦下
     t.alive = false;
     const [wx, wz] = G.boardToWorld(t.gx, t.gy);
     const item = { type: t.type, tile: t, x: wx, z: wz, h: G.baseH(t.layer), fly: 1 };
@@ -99,10 +106,13 @@
     S.grabs++;
     checkTriples();
     checkEnd();
+    if (G.onGrab) G.onGrab(t);
     if (S.state === 'play' && !S.event && S.grabs >= S.nextEventAt && G.startEvent) {
       G.startEvent();
-      const left = G.boardLeft() / G.TOTAL;            // 越往后越频繁
-      S.nextEventAt = S.grabs + 4 + Math.floor(left * 4 + Math.random() * 3);
+      const left = G.boardLeft() / G.TOTAL();            // 越往后越频繁
+      const ev = G.curLevel().event || { gap: [4, 3] };
+      const moon = G.moonHaste ? G.moonHaste() : 1;      // 血月升得越高，它越急
+      S.nextEventAt = S.grabs + (ev.gap[0] + Math.floor(left * 4 + Math.random() * ev.gap[1])) * moon;
     }
     return true;
   };
@@ -122,9 +132,10 @@
     const board = S.tiles.filter(t => t.alive);
     if (!board.length) return;
     S.shuffles--;
-    G.assignTypes(board, G.liveSlot().map(it => it.type));
+    G.assignTypes(board, G.liveSlot().map(it => it.type), G.curLevel().types || G.TYPES.length);
     board.forEach(t => (t.pop = 1));
     S.history = [];
+    if (G.A) G.A.sfx('shuffle');
   };
 
   // 被触手卷走：从槽里拿掉，稍后塞回盘里被压住的位置
@@ -148,5 +159,24 @@
       const p = pos[i], t = it.tile;
       t.gx = p.gx; t.gy = p.gy; t.layer = p.layer; t.type = it.type; t.alive = true; t.pop = 1;
     });
+  };
+
+  // 调包：触手把槽里两件供品换掉（第四夜的舌头）
+  G.swapTargets = function () {
+    const live = G.liveSlot();
+    if (live.length < 2) return [];
+    const by = {};
+    live.forEach(it => (by[it.type] = (by[it.type] || 0) + 1));
+    const paired = live.filter(it => by[it.type] === 2);
+    const a = paired.length ? paired[Math.floor(Math.random() * paired.length)] : live[Math.floor(Math.random() * live.length)];
+    const rest = live.filter(it => it !== a && it.type !== a.type);
+    if (!rest.length) return [];
+    const b = rest[Math.floor(Math.random() * rest.length)];
+    return [a, b];
+  };
+  G.swapInSlot = function (a, b) {
+    const ta = a.type; a.type = b.type; b.type = ta;
+    a.twist = 0.0001; b.twist = 0.0001;   // 交换时抖一下
+    S.history = [];
   };
 })();

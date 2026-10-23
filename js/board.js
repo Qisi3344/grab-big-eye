@@ -1,20 +1,13 @@
-// 祭盘：63 张供品 / 7 种 / 3 层。只负责摆放、压住判定、可解的类型分配。
+// 祭盘：布局来自 levels.js（五个祭夜各有各的堆法）。只负责摆放、压住判定、可解的类型分配。
 (function () {
   const G = window.G;
 
-  // 布局坐标 gx,gy：网格单位（1 = 一张供品），gy=0 是最远一排
-  G.LAYOUT = (function () {
-    const L = [];
-    for (let r = 0; r < 5; r++) for (let c = 0; c < 6; c++) L.push({ gx: c, gy: r, layer: 0 });
-    for (let r = 0; r < 4; r++) for (let c = 0; c < 5; c++) L.push({ gx: c + 0.5, gy: r + 0.5, layer: 1 });
-    // 顶层摆成一只眼睛：上眼睑、眼角、瞳孔、下眼睑
-    [[1, 0], [2, 0], [3, 0], [4, 0], [0, 1], [5, 1], [2.5, 2], [0, 3], [5, 3], [1, 4], [2, 4], [3, 4], [4, 4]]
-      .forEach(([gx, gy]) => L.push({ gx, gy, layer: 2 }));
-    return L;
-  })();
-  G.TOTAL = G.LAYOUT.length; // 63
-
   const overlap = (a, b) => Math.abs(a.gx - b.gx) < 0.99 && Math.abs(a.gy - b.gy) < 0.99;
+  G.overlap = overlap;
+
+  // 当前夜的布局（main.js / game.js 在开局前已设好 G.level）
+  G.curLayout = function () { const lv = G.LEVELS[G.level - 1]; return G.layoutFor(lv || G.LEVELS[0]); };
+  G.TOTAL = function () { return G.curLayout().length; };
 
   G.isCovered = function (t, tiles) {
     for (const u of tiles) if (u.alive && u !== t && u.layer > t.layer && overlap(u, t)) return true;
@@ -46,8 +39,10 @@
   }
 
   // 给 boardTiles 分配类型：先补齐槽里已有的残组，再放整三张。保证存在一条通关顺序。
-  G.assignTypes = function (boardTiles, slotTypes) {
-    const nT = G.TYPES.length, counts = Array(nT).fill(0), inSlot = Array(nT).fill(0);
+  // nT：这一夜用几种供品（腐眼宴之后的夜是 8 种）。
+  G.assignTypes = function (boardTiles, slotTypes, nT) {
+    nT = nT || G.TYPES.length;
+    const counts = Array(nT).fill(0), inSlot = Array(nT).fill(0);
     if (slotTypes) slotTypes.forEach(t => inSlot[t]++);
     let needs = [];
     if (boardTiles.some(t => t.type != null)) {
@@ -74,15 +69,17 @@
   };
 
   G.newBoard = function () {
-    const tiles = G.LAYOUT.map((p, i) => ({ id: i, gx: p.gx, gy: p.gy, layer: p.layer, type: null, alive: true, pop: 0, lift: 0 }));
-    G.assignTypes(tiles, null);
+    const lv = G.LEVELS[G.level - 1] || G.LEVELS[0];
+    const tiles = G.curLayout().map((p, i) => ({ id: i, gx: p.gx, gy: p.gy, layer: p.layer, type: null, alive: true, pop: 0, lift: 0 }));
+    G.assignTypes(tiles, null, lv.types || G.TYPES.length);
     return tiles;
   };
 
   // 被卷走的供品要塞回「下层」：找空着、而且正被别的供品压住的位置
   G.buryPositions = function (tiles, n) {
+    const L = G.curLayout();
     const alive = tiles.filter(t => t.alive);
-    const vacant = G.LAYOUT.filter(p => !alive.some(t => t.layer === p.layer && t.gx === p.gx && t.gy === p.gy));
+    const vacant = L.filter(p => !alive.some(t => t.layer === p.layer && t.gx === p.gx && t.gy === p.gy));
     const covered = vacant.filter(p => alive.some(u => u.layer > p.layer && overlap(u, p)));
     G.shuffle(covered);
     covered.sort((a, b) => a.layer - b.layer);

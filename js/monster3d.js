@@ -358,10 +358,12 @@
     const n = 0.5, f = 120;
     camera.projectionMatrix.makePerspective(-cam.cx / cam.f * n, (W - cam.cx) / cam.f * n, cam.cy / cam.f * n, -(H - cam.cy) / cam.f * n, n, f);
     camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
-    // 整只克苏鲁朝向镜头（否则 57° 俯角下会被压扁）
+    // 整只克苏鲁朝向镜头（否则 57° 俯角下会被压扁）；凝视/黑暗终局推近（G.MON_Z），血月满时起身（G.RISE）
     const bob = Math.sin(time * 0.6) * 0.05;
+    const rise = G.RISE || 0;
     group.rotation.set(-cam.pitch, 0, 0);
-    group.position.copy(g2t(C[0], C[1] + bob * U * 0.5, C[2]));
+    group.position.copy(g2t(C[0], C[1] + bob * U * 0.5 + rise * 1.6, G.MON_Z || C[2]));
+    group.scale.setScalar(1 + rise * 0.1);
     group.updateMatrixWorld(true);
     const san = S.san / 100;
 

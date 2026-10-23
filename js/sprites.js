@@ -170,6 +170,46 @@
     return finish(g);
   }
 
+  // 腐化之眼：溃烂的巩膜、病黄虹膜、歪斜的竖瞳，眼后探着小肉须。它会转着看你。
+  function rotEye() {
+    const r = G.mulberry(66), g = blank();
+    const cx = 11.5, cy = 11, R = 8.6;
+    const sclera = hex('#5d5940'), iris = hex('#b8931f'), rot = hex('#37452c');
+    // 眼后的小肉须：先画，让球体盖住根部
+    for (let k = 0; k < 6; k++) {
+      const a = -2.6 + k * 0.5 + r() * 0.25;
+      let x = cx + Math.cos(a) * R * 0.75, y = cy + Math.sin(a) * R * 0.75;
+      const len = 3 + r() * 4.5, w = 1.9 - k * 0.12;
+      for (let t = 0; t < len; t += 0.5) {
+        const bx = x + Math.cos(a) * t * 0.9 + Math.sin(t * 1.7 + k) * 0.7, by = y + Math.sin(a) * t * 0.9 - t * 0.25;
+        const rr = w * (1 - t / len);
+        for (let dy = -Math.ceil(rr); dy <= Math.ceil(rr); dy++) for (let dx = -Math.ceil(rr); dx <= Math.ceil(rr); dx++) {
+          if (dx * dx + dy * dy > rr * rr) continue;
+          const X = Math.round(bx + dx), Y = Math.round(by + dy);
+          if (X >= 0 && Y >= 0 && X < N && Y < N && !g[Y][X]) g[Y][X] = shade(hex('#463050'), 0.55 + 0.6 * (1 - t / len));
+        }
+      }
+    }
+    sphere(g, cx, cy, R, (dx, dy, nz, x, y) => {
+      const ix = dx - 0.05, iy = dy - 0.1, id = Math.hypot(ix, iy);
+      if (id < 0.4) {
+        if (Math.abs(ix + 0.04) < 0.07 && Math.abs(iy) < 0.3) return [12, 9, 3];   // 歪着的长竖瞳
+        return id > 0.32 ? shade(iris, 0.5) : iris;
+      }
+      // 溃烂斑：一团团暗绿的烂肉与黑霉
+      const h1 = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453, v1 = h1 - Math.floor(h1);
+      if (v1 < 0.1) return rot;
+      if (v1 > 0.96) return [24, 20, 12];
+      return sclera;
+    });
+    // 从下眼睑淌下来的脓
+    for (let t = 0; t < 5; t++) {
+      const x = 8 + Math.floor(r() * 8);
+      for (let y = cy + 6; y < Math.min(N, cy + 8 + r() * 4); y++) if (g[y] && g[y][x]) g[y][x] = shade(hex('#7a7a34'), 0.7);
+    }
+    return finish(g);
+  }
+
   G.SPR_N = N;
   G.TYPES = [
     { key: 'red', name: '红瞳眼球' },
@@ -179,6 +219,7 @@
     { key: 'tentacle', name: '触手' },
     { key: 'candle', name: '蜡烛' },
     { key: 'statue', name: '小雕像' },
+    { key: 'roteye', name: '腐化之眼' },
   ];
 
   G.buildSprites = function () {
@@ -191,6 +232,7 @@
       tentacle(),
       candle(),
       statue(5),
+      rotEye(),
     ];
     G.SPRITES = S.map(s => s.img);
     G.SPRITES_DIM = S.map(s => s.dim);

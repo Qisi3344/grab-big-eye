@@ -11,7 +11,7 @@
   <div id="stage">
     <canvas id="game"></canvas>
     <div class="scan"></div>
-    <div id="hud"><span>盘中供品</span><b id="left">63</b></div>
+    <div id="hud"><span class="night" id="lvName">第一夜</span><span>盘中供品</span><b id="left">63</b></div>
     <div id="toast"></div>
     <button id="btnMenu" class="icon" aria-label="菜单">☰</button>
   </div>
@@ -25,6 +25,7 @@
       <button id="btnUndo">撤销</button>
       <button id="btnShuffle">洗牌 <b>3</b></button>
       <button id="btnRestart">重开</button>
+      <button id="btnMute" title="声音">♪</button>
     </div>
   </footer>
   <div id="end">
@@ -61,8 +62,11 @@
 <script src="js/util.js"></script>
 <script src="js/projection.js"></script>
 <script src="js/sprites.js"></script>
+<script src="js/levels.js"></script>
 <script src="js/board.js"></script>
 <script src="js/game.js"></script>
+<script src="js/rites.js"></script>
+<script src="js/audio.js"></script>
 <script src="js/monster.js"></script>
 <script src="js/vendor/three.min.js"></script>
 <script src="js/monster3d.js"></script>

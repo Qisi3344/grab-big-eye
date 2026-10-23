@@ -25,6 +25,8 @@
     G.fitCamera(W, H);
     G.R.buildNoise(W, H);
   }
+  // 换夜之后槽位轨宽度可能变了：newGame 里会请一次重新取景
+  G.refitCamera = () => G.fitCamera(W, H);
 
   function toLocal(e) {
     const r = canvas.getBoundingClientRect();
@@ -41,11 +43,13 @@
     const p = toLocal(e); G.pointer = p;
     canvas.setPointerCapture(e.pointerId);
     if (S.state !== 'play') return;
+    if (G.RITE.moonHit(p.x, p.y)) return;          // 点血月让它垂眼（第四夜）
     if (G.eventPointerDown(p.x, p.y)) return;
     const q = G.R.hitTile(p.x, p.y);
     if (q) {
-      if (q.free) G.grab(q.t);
+      if (q.free) { if (G.grab(q.t) && G.A) G.A.sfx('grab'); }
       else if (G.pressBlocks(q.t)) G.say('被触手压住了：拖开它，或者连戳 4 下', 1.6);
+      else if (G.riteBlocks && G.riteBlocks(q.t)) G.say(['水太深了，等它退', '祂正盯着这一只'][Math.floor(Math.random() * 2)], 1.6);
       return;
     }
     G.M.pokeBody(p.x, p.y);
@@ -65,6 +69,8 @@
   ui.shuffle.onclick = () => G.doShuffle();
   document.getElementById('btnRestart').onclick = restart;
   document.getElementById('btnAgain').onclick = restart;
+  const btnMute = document.getElementById('btnMute');
+  btnMute.onclick = () => { btnMute.textContent = G.A.toggle() ? '♪̶' : '♪'; };
   function restart() { ui.end.classList.remove('show'); G.newGame(); }
 
   // —— 开始界面 / 关卡选择 ——
@@ -72,7 +78,16 @@
   const save = (() => { try { return JSON.parse(localStorage.getItem('gbe_save') || '{}'); } catch (e) { return {}; } })();
   const persist = () => { try { localStorage.setItem('gbe_save', JSON.stringify(save)); } catch (e) {} };
   function show(id) { ['title', 'levels'].forEach(k => $(k).classList.toggle('show', k === id)); document.body.classList.toggle('inmenu', !!id && S.state === 'menu' || id === 'title'); }
-  function startLevel(n) { G.level = n; G.newGame(); show(null); ui.end.classList.remove('show'); }
+  function startLevel(n) {
+    G.A.init();                                  // 首次手势：深渊开始出声
+    G.level = n;
+    G.newGame();
+    show(null); ui.end.classList.remove('show');
+    const lv = G.curLevel();
+    const ln = document.getElementById('lvName');
+    if (ln) ln.textContent = lv.name;
+    if (lv.lore) G.say(lv.lore, 3.4);
+  }
   function buildLevels() {
     const box = $('levelList'); box.innerHTML = '';
     G.LEVELS.forEach(lv => {
@@ -85,22 +100,25 @@
       box.appendChild(el);
     });
   }
-  $('btnStart').onclick = () => startLevel(1);
+  // ?lv=N 直接进第 N 夜（调试与体验用，不解锁存档）
+  const lvParam = (() => { const v = parseInt(new URLSearchParams(location.search).get('lv')); return v >= 1 && v <= G.LEVELS.length ? v : 0; })();
+  $('btnStart').onclick = () => startLevel(lvParam || 1);
   $('btnLevels').onclick = () => { buildLevels(); show('levels'); };
   $('btnBack').onclick = () => show(S.state === 'menu' ? 'title' : null);
   $('btnMenu').onclick = () => { buildLevels(); show('levels'); };
   $('btnToLevels').onclick = () => { ui.end.classList.remove('show'); buildLevels(); show('levels'); };
   G.onWin = () => { save.cleared = [...new Set([...(save.cleared || []), G.level])]; save.best = save.best || {}; save.best[G.level] = Math.max(save.best[G.level] || 0, Math.round(S.san)); persist(); };
 
-  const WIN = ['祂合上了七只眼。', '供品献完了。今夜，你还活着。'];
-  const LOSE = ['一条触手一把攥住了你。', '槽位满了。祂慢慢把你拖过桌面。'];
+  const WIN = ['祂合上了七只眼。', '供品献完了。今夜，你还活着。', '祂站起来，走了。桌上的水还是温的。'];
+  const LOSE = ['一条触手一把攥住了你。', '槽位满了。祂慢慢把你拖过桌面。', '最后一格槽合拢的时候，你听见祂笑了。'];
 
   let last = performance.now();
   function loop(now) {
     const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now;
     S.time += dt;
     G.M.update(dt);
-    G.updateEvent(dt);
+    G.updateRites(dt);
+    G.A.update(dt);
     G.R.frame(ctx, W, H, dt, hover);
     // 界面
     const san = S.san;
@@ -113,9 +131,10 @@
     if ((S.state === 'win' || S.state === 'lose') && S.time >= S.endAt && !ui.end.classList.contains('show')) {
       const win = S.state === 'win';
       ui.endTitle.textContent = win ? '献祭完成' : '你被攥住了';
-      ui.endText.textContent = (win ? WIN : LOSE)[Math.floor(Math.random() * 2)];
+      ui.endText.textContent = (win ? WIN : LOSE)[Math.floor(Math.random() * (win ? WIN : LOSE).length)];
       ui.end.classList.toggle('lose', !win);
       ui.end.classList.add('show');
+      if (G.A) G.A.sfx(win ? 'win' : 'lose');
       if (win && G.onWin) G.onWin();
     }
     requestAnimationFrame(loop);

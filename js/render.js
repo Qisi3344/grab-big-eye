@@ -62,7 +62,8 @@
       ctx.fillStyle = '#020807';
       ctx.beginPath(); ctx.moveTo(cx - w * 0.65, top); ctx.lineTo(cx - w * 0.1, top + u * 0.3); ctx.lineTo(cx + w * 0.3, top - 1); ctx.lineTo(cx + w * 0.65, top + u * 0.2); ctx.lineTo(cx + w * 0.65, top - u); ctx.lineTo(cx - w * 0.65, top - u); ctx.fill();
     }
-    M.wallBottom = hz;
+    // 血月（第四夜）：挂在天空一角
+    G.RITE.drawMoon(ctx, W, H);
   };
 
   R.drawRays = function (ctx, W, H, time) {
@@ -221,16 +222,28 @@
       const free = !covered && !blocked;
       const lift = (t === hover && free ? 0.14 : 0) + Math.sin(t.pop * Math.PI) * 0.35;
       const bh = G.baseH(t.layer);
+      // 凝视锁定/预告的供品：脚下泛红脉动（夜五）
+      const warn = G.RITE.tileWarn ? G.RITE.tileWarn(t) : 0;
+      if (warn > 0) groundEllipse(ctx, t.wx, bh - 0.02, t.wz, 0.62, 0.5, `rgba(190,16,8,${0.3 * warn * (0.65 + 0.35 * Math.sin(S.time * 7))})`);
+      // 黑暗终局：剩下的供品自己发出微光（夜五结局）
+      if (S.blackRite) {
+        const gp = P(t.wx, bh + 0.4, t.wz), gr = gp[2] * 0.9;
+        const gg = ctx.createRadialGradient(gp[0], gp[1], 0, gp[0], gp[1], gr);
+        gg.addColorStop(0, 'rgba(120,220,170,0.22)'); gg.addColorStop(1, 'rgba(120,220,170,0)');
+        ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(gp[0], gp[1], gr, 0, TAU); ctx.fill();
+      }
       const r = objectAt(ctx, t.type, t.wx, bh + lift, t.wz, G.OBJ, covered, bh);
+      if (t.type === G.ROTEYE && !covered) G.RITE.drawRotPupil(ctx, r);   // 它在转着看你
       G.tileQuads.push({ t, rect: r, free, type: t.type });
     }
   };
 
   R.drawSlotRail = function (ctx, time) {
     const live = G.liveSlot().length;
-    const danger = live >= 5 ? (live - 4) / 3 : 0;
+    const danger = live >= G.SLOT_N - 2 ? (live - (G.SLOT_N - 3)) / 3 : 0;
+    const hw = G.RAIL_HW || 4.15;
     const z0 = G.SLOT_Z - 0.62, z1 = G.SLOT_Z + 0.62;
-    block(ctx, -4.15, 4.15, z0, z1, 0.22, 0.22, '#2c403b', '#17231f', '#121c19');
+    block(ctx, -hw, hw, z0, z1, 0.22, 0.22, '#2c403b', '#17231f', '#121c19');
     for (let i = 0; i < G.SLOT_N; i++) {
       const x = G.slotX(i);
       groundEllipse(ctx, x, 0.22, G.SLOT_Z, 0.46, 0.46, '#050a09');
@@ -256,8 +269,16 @@
       const arc = Math.sin(it.fly * Math.PI) * 1.3;
       let size = 1.0;
       if (it.dying) { it.dying += dt; size *= Math.max(0, 1 - it.dying / 0.35) * (1 + Math.sin(it.dying * 40) * 0.1); }
+      // 被调包的供品：落地前抖两下
+      let jx = 0, jh = 0;
+      if (it.twist) {
+        it.twist += dt;
+        if (it.twist < 0.7) { jx = Math.sin(it.twist * 34) * 0.06; jh = Math.sin(Math.min(1, it.twist / 0.7) * Math.PI) * 0.5; }
+        else it.twist = 0;
+      }
       if (size <= 0.02) continue;
-      objectAt(ctx, it.type, it.x, it.h + arc, it.z, size, false, 0.15);
+      const r = objectAt(ctx, it.type, it.x + jx, it.h + arc + jh, it.z, size, false, 0.15);
+      if (it.type === G.ROTEYE && !it.dying) G.RITE.drawRotPupil(ctx, r);   // 槽里那只也在看
     }
     for (const it of S.slot.filter(s => s.dying && s.dying > 0.35)) {
       const p = P(it.x, 0.5, it.z);
@@ -315,6 +336,8 @@
     g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, `rgba(0,4,4,${0.7 + madness * 0.27})`);
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     if (madness > 0.05) { ctx.fillStyle = `rgba(100,0,0,${madness * 0.18})`; ctx.fillRect(0, 0, W, H); }
+    // 仪式压暗：凝视前兆 / 黑暗终局
+    if (G.DIM > 0.01) { ctx.fillStyle = `rgba(0,2,2,${Math.min(0.75, G.DIM)})`; ctx.fillRect(0, 0, W, H); }
     const band = (time * 0.37) % 1;
     if (band < 0.06) { ctx.fillStyle = 'rgba(200,230,220,0.05)'; ctx.fillRect(0, Math.round((band / 0.06) * H), W, 3); }
   };
@@ -341,6 +364,12 @@
   R.frame = function (ctx, W, H, dt, hover) {
     const time = S.time;
     ctx.imageSmoothingEnabled = false;
+    ctx.save();
+    // 震屏：咬合 / 惊吓时画面发抖
+    if (G.SHAKE > 0.05) {
+      ctx.translate(Math.round((Math.random() - 0.5) * G.SHAKE * 2), Math.round((Math.random() - 0.5) * G.SHAKE * 2));
+      G.SHAKE = Math.max(0, G.SHAKE - dt * 6);
+    }
     M.layout(W, H);
     R.drawSky(ctx, W, H, time);
     M.drawWall(ctx, W, H);
@@ -350,6 +379,7 @@
     R.drawRays(ctx, W, H, time);
     R.drawDish(ctx, time);
     R.drawTiles(ctx, hover);
+    G.RITE.drawWater(ctx);
     R.drawSlotRail(ctx, time);
     R.drawSlotItems(ctx, dt);
     G.drawEvent(ctx);
@@ -357,5 +387,8 @@
     R.drawSnow(ctx, W, H, dt);
     S.tiles.forEach(t => (t.pop = Math.max(0, t.pop - dt * 3)));
     R.drawFX(ctx, W, H, time);
+    G.RITE.drawWhispers(ctx, W, H);
+    G.RITE.drawGazeVeil(ctx, W, H);
+    ctx.restore();
   };
 })();

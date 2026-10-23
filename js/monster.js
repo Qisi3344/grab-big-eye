@@ -114,10 +114,11 @@
     return P;
   };
 
-  // —— 头的位置（屏幕） ——
+  // —— 头的位置（屏幕）。凝视惊吓/黑暗终局会把祂推近（G.MON_Z），血月满时祂会起身（G.RISE） ——
   M.layout = function () {
-    const [hx, hy, s] = G.proj(0, 2.6, 10.6);
-    M.hx = hx; M.hy = hy; M.u = s * 1.6;
+    const [hx, hy, s] = G.proj(0, 2.6, G.MON_Z || 10.6);
+    const rise = G.RISE || 0;
+    M.hx = hx; M.hy = hy - s * 1.6 * rise * 0.85; M.u = s * 1.6 * (1 + rise * 0.1);
     M.ub = G.proj(0, 1.6, 3.5)[2];
   };
 
@@ -480,18 +481,31 @@
   };
 
   // ============ 捣乱事件 ============
+  // 三种捣乱按当夜的配方抽：卷走供品 / 压盘遮挡 / 调包（第四夜的舌头）。
   G.startEvent = function () {
-    const pairs = G.stealTargets();
-    const canSteal = pairs.length >= 1;
-    const steal = canSteal && (pairs.length === 2 ? Math.random() < 0.65 : Math.random() < 0.3);
-    if (steal) S.event = { kind: 'steal', phase: 'reach', t: 0, dur: 2.3, sq: 9 };
-    else {
+    const mix = (G.curLevel().event || {}).mix || {};
+    const canSteal = G.stealTargets().length >= 1;
+    const canSwap = G.swapTargets().length === 2;
+    const pool = [['steal', mix.steal != null ? mix.steal : 0.65], ['press', mix.press != null ? mix.press : 0.35]];
+    if (mix.swap && canSwap) pool.push(['swap', mix.swap]);
+    const usable = pool.filter(([k, w]) => w > 0 && (k !== 'steal' || canSteal));
+    const tot = usable.reduce((s, [, w]) => s + w, 0);
+    let r = Math.random() * tot, kind = 'press';
+    for (const [k, w] of usable) { r -= w; if (r <= 0) { kind = k; break; } }
+    if (kind === 'steal') {
+      S.event = { kind: 'steal', phase: 'reach', t: 0, dur: 2.3, sq: 9 };
+      G.say('它伸手了……', 1.6);
+    } else if (kind === 'swap') {
+      S.event = { kind: 'swap', phase: 'reach', t: 0, dur: 2.0, sq: 9 };
+      G.say('一条细长的东西探向了槽位……', 1.8);
+    } else {
       const zc = 2.4 + Math.random() * 2.2;
       const rest = [];
       for (let i = 0; i < 16; i++) { const t = i / 15; rest.push([-6.0 + t * 11.0, zc + Math.sin(t * 4.2 + zc) * 0.6 - t * 0.4]); }
       S.event = { kind: 'press', phase: 'slam', t: 0, rest, off: rest.map(() => [0, 0]), pokes: 0, sq: 9, drag: null };
+      G.say('一条触手压了下来', 1.6);
     }
-    G.say(steal ? '它伸手了……' : '一条触手压了下来', 1.6);
+    if (G.A) G.A.sfx('event');
   };
 
   const offscreen = () => !!(G.M3 && G.M3.model) || G.EV_OFFSCREEN;
@@ -501,12 +515,17 @@
   function stealPath(ev) {
     let base = evOrigin(1);
     let tip;
-    const tg = ev.targets && ev.targets.length ? ev.targets : G.stealTargets();
-    if (tg.length) {
-      let sx = 0, sy = 0;
-      tg.forEach(it => { const p = G.proj(it.x, it.h, it.z); sx += p[0]; sy += p[1]; });
-      tip = [sx / tg.length, sy / tg.length];
-    } else tip = G.proj(G.slotX(3), 0.2, G.SLOT_Z);
+    if (ev.kind === 'swap') {
+      // 舌头扫向槽位轨中段
+      tip = G.proj(G.slotX((G.SLOT_N - 1) / 2), 0.35, G.SLOT_Z + 0.2);
+    } else {
+      const tg = ev.targets && ev.targets.length ? ev.targets : G.stealTargets();
+      if (tg.length) {
+        let sx = 0, sy = 0;
+        tg.forEach(it => { const p = G.proj(it.x, it.h, it.z); sx += p[0]; sy += p[1]; });
+        tip = [sx / tg.length, sy / tg.length];
+      } else tip = G.proj(G.slotX(3), 0.2, G.SLOT_Z);
+    }
     ev.tip = tip;
     // 有模型时从镜头外（右侧屏幕外）伸进来，不从克苏鲁身上长出来（她 2026-10-22）
     if (offscreen()) base = [G.cam.cx * 2 + M.u * 1.4, tip[1] - M.u * 0.6];
@@ -546,12 +565,23 @@
   G.updateEvent = function (dt) {
     const ev = S.event; if (!ev) return;
     ev.t += dt; ev.sq += dt;
-    if (S.state !== 'play' && ev.phase !== 'retreat' && ev.phase !== 'slide') { ev.phase = ev.kind === 'steal' ? 'retreat' : 'slide'; ev.t = 0; ev.vel = [-6, 2]; ev.reachAt = ev.reachAt || 0.5; }
-    if (ev.kind === 'steal') {
+    if (S.state !== 'play' && ev.phase !== 'retreat' && ev.phase !== 'slide') { ev.phase = ev.kind !== 'press' ? 'retreat' : 'slide'; ev.t = 0; ev.vel = [-6, 2]; ev.reachAt = ev.reachAt || 0.5; }
+    if (ev.kind === 'steal' || ev.kind === 'swap') {
       if (ev.phase === 'reach' && ev.t >= ev.dur) {
-        ev.targets = G.stealTargets();
-        ev.phase = 'grab'; ev.t = 0; ev.reachAt = 1;
-      } else if (ev.phase === 'grab' && ev.t >= 0.28) {
+        if (ev.kind === 'swap') {
+          const tg = G.swapTargets();
+          if (tg.length === 2) {
+            G.swapInSlot(tg[0], tg[1]);
+            G.say('舌尖扫过槽位——两件供品换了个样', 2.2);
+            G.setMood('smug', 2.6);
+            if (G.A) G.A.sfx('squish');
+          }
+          ev.phase = 'retreat'; ev.t = 0;
+        } else {
+          ev.targets = G.stealTargets();
+          ev.phase = 'grab'; ev.t = 0; ev.reachAt = 1;
+        }
+      } else if (ev.kind === 'steal' && ev.phase === 'grab' && ev.t >= 0.28) {
         const live = G.liveSlot();
         let tg = (ev.targets || []).filter(it => live.includes(it));
         if (!tg.length) tg = G.stealTargets();
@@ -588,7 +618,7 @@
     const hit = G.distToPolyline(x, y, P);
     const tol = (ev.kind === 'press' ? M.ub * 0.55 : M.ub * 0.5) + 5;
     if (hit.d > tol) return false;
-    if (ev.kind === 'steal') {
+    if (ev.kind !== 'press') {
       if (ev.phase === 'reach') {
         ev.reachAt = ev.t / ev.dur; ev.phase = 'hurt'; ev.t = 0; ev.sq = 0;
         G.say('它吃痛缩回去了', 1.4); G.setMood('angry', 2.2);
@@ -638,10 +668,10 @@
   G.drawEvent = function (ctx) {
     const ev = S.event; if (!ev) { return; }
     const sq = squash(ev.sq);
-    if (ev.kind === 'steal') {
+    if (ev.kind !== 'press') {
       const P = stealPath(ev);
       ev.path = P;
-      G.drawTentacle(ctx, P, M.ub * 0.7, M.ub * 0.22, PAL_EVENT, { sq });
+      G.drawTentacle(ctx, P, M.ub * (ev.kind === 'swap' ? 0.45 : 0.7), M.ub * 0.18, PAL_EVENT, { sq });
       if (ev.carried && ev.phase === 'retreat') {
         const tip = P[P.length - 1];
         ev.carried.forEach((it, k) => {

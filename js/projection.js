@@ -25,9 +25,10 @@
   G.fitCamera = function (W, H) {
     cam.sp = Math.sin(cam.pitch); cam.cp = Math.cos(cam.pitch);
     cam.cx = W / 2; cam.cy = 0; cam.f = 100;
-    // 宽度：近边槽位轨占列宽的 94%
+    // 宽度：近边槽位轨占列宽的 94%（槽位格数随祭夜变化）
     const colW = Math.min(W, H * 0.78);
-    let a = G.proj(-4.4, 0, -2.3), b = G.proj(4.4, 0, -2.3);
+    const railHW = (G.RAIL_HW || 4.0) + 0.35;
+    let a = G.proj(-railHW, 0, -2.3), b = G.proj(railHW, 0, -2.3);
     cam.f *= (colW * 0.94) / (b[0] - a[0]);
     // 高度：近边到克苏鲁头顶
     let top = G.proj(0, 7.0, 10.6)[1], bot = G.proj(0, 0, -2.35)[1];
